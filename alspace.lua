@@ -1,5 +1,5 @@
 -- ==============================================
---     ONYX KEY SYSTEM - WISNU HUB (FULL + FITUR TAMBAHAN)
+--     ONYX KEY SYSTEM - WISNU HUB
 -- ==============================================
 
 -- LOAD SISTEM KEY
@@ -637,8 +637,8 @@ local State = {
     FPS                 = 0,
     Frames              = 0,
     LastTick            = tick(),
-    created             = false,
-    LastCrosshairStyle  = nil,
+    -- created             = false,   -- REMOVED (diganti GUI crosshair)
+    -- LastCrosshairStyle  = nil,     -- REMOVED
     UsedPallets         = {}
 }
 
@@ -980,7 +980,7 @@ local KillerAnims = {
 
 local hookedKillers = {}
 local VaultTracks   = {}
-local CrosshairDrawings = {}
+-- CrosshairDrawings = {} -- REMOVED (diganti GUI)
 local DisabledEffects   = {}
 
 local AttackPaths = {
@@ -1017,8 +1017,9 @@ RayParams.FilterType = Enum.RaycastFilterType.Blacklist
 
 local EmoteRemote = Remotes:WaitForChild("EmoteHandler")
 
--- ============== ITEM ESP ==============
-local ItemESP_Guis = {}
+-- ============== ITEM ESP (BARU) ==============
+local ItemESP_Guis = {}  -- Menyimpan BillboardGui per player
+
 local function updateItemESP(player)
     -- Jika ESP Status dimatikan atau ShowItem false, hapus semua gui
     if not ESPStatus.Enabled or not ESPStatus.ShowItem then
@@ -2744,56 +2745,131 @@ Lighting.ChildAdded:Connect(function(v)
     end
 end)
 
--- CROSSHAIR
-local function clearCrosshair()
-    for _, v in pairs(CrosshairDrawings) do if v.Remove then v:Remove() end end
-    CrosshairDrawings = {}
+-- ====== CROSSHAIR (GUI-based) ======
+local GUICrosshair = {
+    Gui = nil,
+    Elements = {}
+}
+
+function ClearGUICrosshair()
+    if GUICrosshair.Gui then
+        GUICrosshair.Gui:Destroy()
+        GUICrosshair.Gui = nil
+        GUICrosshair.Elements = {}
+    end
 end
 
-local function drawCrosshair()
+function CreateGUICrosshair()
+    ClearGUICrosshair()
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "CrosshairGUI"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.Parent = PlayerGui
+
+    GUICrosshair.Gui = gui
+    GUICrosshair.Elements = {}
+
+    if Crosshair.Style == "Plus" then
+        for i = 1, 4 do
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(0, Crosshair.Size, 0, Crosshair.Thickness)
+            frame.BackgroundColor3 = Crosshair.Color
+            frame.BackgroundTransparency = 0
+            frame.BorderSizePixel = 0
+            frame.Parent = gui
+            table.insert(GUICrosshair.Elements, frame)
+        end
+    elseif Crosshair.Style == "Dot" then
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(0, Crosshair.Size, 0, Crosshair.Size)
+        frame.BackgroundColor3 = Crosshair.Color
+        frame.BackgroundTransparency = 0
+        frame.BorderSizePixel = 0
+        frame.Parent = gui
+        table.insert(GUICrosshair.Elements, frame)
+    elseif Crosshair.Style == "Circle" then
+        local circle = Instance.new("ImageLabel")
+        circle.Size = UDim2.new(0, Crosshair.Size * 2, 0, Crosshair.Size * 2)
+        circle.BackgroundTransparency = 1
+        circle.Image = "rbxassetid://109403908331326"
+        circle.ImageColor3 = Crosshair.Color
+        circle.ImageTransparency = 0
+        circle.Parent = gui
+        table.insert(GUICrosshair.Elements, circle)
+    end
+
+    UpdateGUICrosshair()
+end
+
+function UpdateGUICrosshair()
     if not Crosshair.Enabled then
-        for _, v in pairs(CrosshairDrawings) do if v then v.Visible = false end end
+        ClearGUICrosshair()
         return
     end
-    if State.LastCrosshairStyle ~= Crosshair.Style then
-        clearCrosshair(); State.created = false
-        State.LastCrosshairStyle = Crosshair.Style
+
+    local gui = GUICrosshair.Gui
+    if not gui then
+        CreateGUICrosshair()
+        return
     end
+
     local cam = workspace.CurrentCamera
     local center = Vector2.new(
         cam.ViewportSize.X / 2 + Crosshair.OffsetX,
         cam.ViewportSize.Y / 2 + Crosshair.OffsetY
     )
-    if not State.created then
-        State.created = true
-        if Crosshair.Style == "Plus" then
-            for i = 1, 4 do
-                local line = Drawing.new("Line"); line.Visible = true
-                table.insert(CrosshairDrawings, line)
-            end
-        elseif Crosshair.Style == "Dot" then
-            local dot = Drawing.new("Circle"); dot.Filled = true; dot.Visible = true
-            table.insert(CrosshairDrawings, dot)
-        elseif Crosshair.Style == "Circle" then
-            local circle = Drawing.new("Circle"); circle.Filled = false; circle.Visible = true
-            table.insert(CrosshairDrawings, circle)
-        end
-    end
+
     if Crosshair.Style == "Plus" then
-        for _, line in pairs(CrosshairDrawings) do line.Color = Crosshair.Color; line.Thickness = Crosshair.Thickness end
-        CrosshairDrawings[1].From = center + Vector2.new(-Crosshair.Size, 0); CrosshairDrawings[1].To = center + Vector2.new(-2, 0)
-        CrosshairDrawings[2].From = center + Vector2.new(Crosshair.Size, 0); CrosshairDrawings[2].To = center + Vector2.new(2, 0)
-        CrosshairDrawings[3].From = center + Vector2.new(0, -Crosshair.Size); CrosshairDrawings[3].To = center + Vector2.new(0, -2)
-        CrosshairDrawings[4].From = center + Vector2.new(0, Crosshair.Size); CrosshairDrawings[4].To = center + Vector2.new(0, 2)
+        local frames = GUICrosshair.Elements
+        if #frames ~= 4 then
+            CreateGUICrosshair()
+            return
+        end
+
+        local size = Crosshair.Size
+        local thick = Crosshair.Thickness
+
+        frames[1].Position = UDim2.new(0, center.X - size, 0, center.Y - thick/2)
+        frames[1].Size = UDim2.new(0, size - thick/2, 0, thick)
+        frames[2].Position = UDim2.new(0, center.X + thick/2, 0, center.Y - thick/2)
+        frames[2].Size = UDim2.new(0, size - thick/2, 0, thick)
+        frames[3].Position = UDim2.new(0, center.X - thick/2, 0, center.Y - size)
+        frames[3].Size = UDim2.new(0, thick, 0, size - thick/2)
+        frames[4].Position = UDim2.new(0, center.X - thick/2, 0, center.Y + thick/2)
+        frames[4].Size = UDim2.new(0, thick, 0, size - thick/2)
+
+        for _, f in ipairs(frames) do
+            f.BackgroundColor3 = Crosshair.Color
+            f.Visible = true
+        end
     elseif Crosshair.Style == "Dot" then
-        local dot = CrosshairDrawings[1]
-        dot.Position = center; dot.Radius = Crosshair.Size / 2; dot.Color = Crosshair.Color
+        local dot = GUICrosshair.Elements[1]
+        if not dot then
+            CreateGUICrosshair()
+            return
+        end
+        dot.Position = UDim2.new(0, center.X - Crosshair.Size/2, 0, center.Y - Crosshair.Size/2)
+        dot.Size = UDim2.new(0, Crosshair.Size, 0, Crosshair.Size)
+        dot.BackgroundColor3 = Crosshair.Color
+        dot.Visible = true
     elseif Crosshair.Style == "Circle" then
-        local circle = CrosshairDrawings[1]
-        circle.Position = center; circle.Radius = Crosshair.Size
-        circle.Color = Crosshair.Color; circle.Thickness = Crosshair.Thickness
+        local circle = GUICrosshair.Elements[1]
+        if not circle then
+            CreateGUICrosshair()
+            return
+        end
+        circle.Position = UDim2.new(0, center.X - Crosshair.Size, 0, center.Y - Crosshair.Size)
+        circle.Size = UDim2.new(0, Crosshair.Size * 2, 0, Crosshair.Size * 2)
+        circle.ImageColor3 = Crosshair.Color
+        circle.Visible = true
     end
 end
+
+-- ====== END CROSSHAIR ======
+
+-- ====== OLD CROSSHAIR FUNCTIONS REMOVED ======
 
 local function updateParryCircle()
     local root = getRoot()
@@ -3048,7 +3124,7 @@ end)
 
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
-    GunAim.Target = nil; GunAim.Holding = false
+    GunAim.Target = nil; GunAim.Holding = nil
     applyCameraFOV()
 end)
 
@@ -3129,91 +3205,99 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- ===== MAIN RENDERSTEPPED LOOP (dibungkus pcall) =====
 RunService.RenderStepped:Connect(function()
-    local root = getRoot()
-    if not root then return end
-    local now = tick()
-    local hrp = root
+    local ok, err = pcall(function()
+        local root = getRoot()
+        if not root then return end
+        local now = tick()
+        local hrp = root
 
-    if now - Timers.lastESPUpdate >= 0.05 then
-        Timers.lastESPUpdate = now
+        if now - Timers.lastESPUpdate >= 0.05 then
+            Timers.lastESPUpdate = now
 
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character then
-                local char = p.Character
-                local hum  = char:FindFirstChildOfClass("Humanoid")
-                if hum and hum.Health > 0 then
-                    local hrp2 = char:FindFirstChild("HumanoidRootPart")
-                    if hrp2 then
-                        local distance = (hrp2.Position - root.Position).Magnitude
-                        if distance <= ESP.Distance then
-                            if ESP.Survivor and p.Team and p.Team.Name == "Survivors" then
-                                createESP(char, TeamColors.Survivor)
-                            elseif ESP.Killer and p.Team and p.Team.Name == "Killer" then
-                                createESP(char, TeamColors.Killer)
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local char = p.Character
+                    local hum  = char:FindFirstChildOfClass("Humanoid")
+                    if hum and hum.Health > 0 then
+                        local hrp2 = char:FindFirstChild("HumanoidRootPart")
+                        if hrp2 then
+                            local distance = (hrp2.Position - root.Position).Magnitude
+                            if distance <= ESP.Distance then
+                                if ESP.Survivor and p.Team and p.Team.Name == "Survivors" then
+                                    createESP(char, TeamColors.Survivor)
+                                elseif ESP.Killer and p.Team and p.Team.Name == "Killer" then
+                                    createESP(char, TeamColors.Killer)
+                                else
+                                    removeESP(char)
+                                end
                             else
                                 removeESP(char)
                             end
-                        else
-                            removeESP(char)
                         end
+                        createStatusESP(p, char, root)
+                    else
+                        removeESP(char)
                     end
-                    createStatusESP(p, char, root)
-                else
-                    removeESP(char)
                 end
+            end
+
+            if ESP.Generator then
+                for gen in pairs(ESPCache.Generators) do UpdateGenerator(gen) end
+            end
+
+            for obj in pairs(ESPCache.Windows) do UpdateMapESP(obj, root) end
+            for obj in pairs(ESPCache.Pallets) do UpdateMapESP(obj, root) end
+
+            UpdateSCPEsp(root)
+            applyVisual()
+            applyNoScreenEffects()
+            updateParryCircle()
+        end
+        
+        -- ===== ITEM ESP (dibungkus pcall) =====
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then
+                pcall(function() updateItemESP(p) end)
             end
         end
 
-        if ESP.Generator then
-            for gen in pairs(ESPCache.Generators) do UpdateGenerator(gen) end
-        end
+        -- Crosshair menggunakan GUI baru
+        UpdateGUICrosshair()
 
-        for obj in pairs(ESPCache.Windows) do UpdateMapESP(obj, root) end
-        for obj in pairs(ESPCache.Pallets) do UpdateMapESP(obj, root) end
-
-        UpdateSCPEsp(root)
-        applyVisual()
-        applyNoScreenEffects()
-        updateParryCircle()
-    end
-    
-    -- ===== ITEM ESP =====
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            updateItemESP(p)
+        UpdateThirdPerson()
+        
+        if Config.Surv_ParryCircle and Config.Surv_AutoParry and hrp then 
+            if not State.AutoParryAdornment or State.AutoParryAdornment.Parent ~= hrp then 
+                if State.AutoParryAdornment then State.AutoParryAdornment:Destroy() end
+                State.AutoParryAdornment = Instance.new("CylinderHandleAdornment")
+                State.AutoParryAdornment.Name = "AutoParryCircleESP"
+                State.AutoParryAdornment.Height = 0.05
+                State.AutoParryAdornment.Transparency = 0.3
+                State.AutoParryAdornment.Adornee = hrp
+                State.AutoParryAdornment.Parent = hrp
+                State.AutoParryAdornment.ZIndex = 0
+                State.AutoParryAdornment.AlwaysOnTop = false 
+            end
+            local cR = Config.Surv_ParryRadius
+            State.AutoParryAdornment.Radius = cR
+            State.AutoParryAdornment.InnerRadius = math.max(0.1, cR - 0.15)
+            State.AutoParryAdornment.CFrame = CFrame.new(0, -3, 0) * CFrame.Angles(math.rad(90), 0, 0)
+            if State.ParryCooldown then 
+                State.AutoParryAdornment.Color3 = Color3.fromRGB(255, 128, 0) 
+            elseif Config.Surv_ParryAggressive then 
+                State.AutoParryAdornment.Color3 = Color3.fromRGB(255, 0, 0) 
+            else 
+                State.AutoParryAdornment.Color3 = Color3.fromRGB(0, 255, 255) 
+            end 
+        elseif State.AutoParryAdornment then 
+            State.AutoParryAdornment:Destroy()
+            State.AutoParryAdornment = nil 
         end
-    end
-
-    drawCrosshair()
-    UpdateThirdPerson()
-    
-    if Config.Surv_ParryCircle and Config.Surv_AutoParry and hrp then 
-        if not State.AutoParryAdornment or State.AutoParryAdornment.Parent ~= hrp then 
-            if State.AutoParryAdornment then State.AutoParryAdornment:Destroy() end
-            State.AutoParryAdornment = Instance.new("CylinderHandleAdornment")
-            State.AutoParryAdornment.Name = "AutoParryCircleESP"
-            State.AutoParryAdornment.Height = 0.05
-            State.AutoParryAdornment.Transparency = 0.3
-            State.AutoParryAdornment.Adornee = hrp
-            State.AutoParryAdornment.Parent = hrp
-            State.AutoParryAdornment.ZIndex = 0
-            State.AutoParryAdornment.AlwaysOnTop = false 
-        end
-        local cR = Config.Surv_ParryRadius
-        State.AutoParryAdornment.Radius = cR
-        State.AutoParryAdornment.InnerRadius = math.max(0.1, cR - 0.15)
-        State.AutoParryAdornment.CFrame = CFrame.new(0, -3, 0) * CFrame.Angles(math.rad(90), 0, 0)
-        if State.ParryCooldown then 
-            State.AutoParryAdornment.Color3 = Color3.fromRGB(255, 128, 0) 
-        elseif Config.Surv_ParryAggressive then 
-            State.AutoParryAdornment.Color3 = Color3.fromRGB(255, 0, 0) 
-        else 
-            State.AutoParryAdornment.Color3 = Color3.fromRGB(0, 255, 255) 
-        end 
-    elseif State.AutoParryAdornment then 
-        State.AutoParryAdornment:Destroy()
-        State.AutoParryAdornment = nil 
+    end)
+    if not ok then
+        warn("[Wisnu Hub] Render Error:", err)
     end
 end)
 
@@ -3244,8 +3328,9 @@ task.spawn(function()
         end
     end
 end)
+
 -- ============================================================
---  UI STRUKTUR (OXIDELIB)
+--  UI STRUKTUR (OXIDELIB - GROWAGARDEN2)
 -- ============================================================
 
 local TabPlayer = Window:AddTab({ Name = "Player", Icon = "user" })
@@ -3275,7 +3360,7 @@ local TabUISettings = Window:AddTab({ Name = "UI Settings", Icon = "settings" })
 local SubUIMenu = TabUISettings:AddSubTab("Menu")
 
 -- ============================================================
---  UI ELEMENTS (SEMUA FITUR DARI vidijembot.txt + TAMBAHAN)
+--  UI ELEMENTS (SEMUA FITUR DARI vidijembot.txt)
 -- ============================================================
 
 -- ===== PLAYER / SURVIVOR =====
@@ -3376,27 +3461,6 @@ SubSurvivor:AddKeybind({
 })
 
 SubSurvivor:AddDivider()
-SubSurvivor:AddSection("Anti-Detection (dari fitur tambahan)")
-SubSurvivor:AddToggle({
-    Name = "Anti Aura (No Detect)",
-    Default = false,
-    Tooltip = "Blokir remote pelacak agar Killer tidak bisa melihat aura kamu",
-    Callback = function(v) getgenv().AntiAura = v end
-})
-SubSurvivor:AddToggle({
-    Name = "Silent Actions (Anti-Noise)",
-    Default = false,
-    Tooltip = "Blokir notifikasi suara ke Killer (lompat, lari, vault)",
-    Callback = function(v) getgenv().SilentActions = v end
-})
-SubSurvivor:AddToggle({
-    Name = "Notify Killer Stun",
-    Default = false,
-    Tooltip = "Tampilkan notifikasi ketika Killer terkena stun",
-    Callback = function(v) getgenv().NotifyStun = v end
-})
-
-SubSurvivor:AddDivider()
 SubSurvivor:AddButton({ Name = "Instan Escape (Finish Line)", Callback = function() teleportToFinishLine() end })
 
 -- ===== PLAYER / KILLER =====
@@ -3493,29 +3557,6 @@ SubKiller:AddButton({ Name = "Deactivate Power", Callback = function()
         and ReplicatedStorage.Remotes.Killers.Masked:FindFirstChild("Deactivatepower")
     if Event then Event:FireServer() end
 end })
-
-SubKiller:AddDivider()
-SubKiller:AddSection("Killer Tambahan (dari fitur tambahan)")
-SubKiller:AddToggle({
-    Name = "Auto Attack",
-    Default = false,
-    Tooltip = "Serang otomatis ke Survivor terdekat dalam jangkauan",
-    Callback = function(v) getgenv().AutoAttack = v end
-})
-SubKiller:AddSlider({
-    Name = "Attack Range",
-    Min = 5,
-    Max = 25,
-    Default = 10,
-    Tooltip = "Jarak maksimum serangan otomatis",
-    Callback = function(v) getgenv().AttackRange = v end
-})
-SubKiller:AddToggle({
-    Name = "Double Damage Generator",
-    Default = false,
-    Tooltip = "Menendang Generator dengan damage dobel (khusus Killer)",
-    Callback = function(v) getgenv().DoubleDamageGen = v end
-})
 
 -- ===== PLAYER / AIMBOT =====
 SubAimBot:AddSection("Gun AimLock")
@@ -3755,7 +3796,14 @@ SubCrosshair:AddSection("Crosshair")
 local CrosshairToggle = SubCrosshair:AddToggle({
     Name = "Enable Crosshair",
     Default = false,
-    Callback = function(v) Crosshair.Enabled = v end
+    Callback = function(v)
+        Crosshair.Enabled = v
+        if v then
+            CreateGUICrosshair()
+        else
+            ClearGUICrosshair()
+        end
+    end
 })
 CrosshairToggle:AddColorPicker({
     Name = "Crosshair Color",
@@ -3766,7 +3814,12 @@ SubCrosshair:AddDropdown({
     Name = "Style",
     Options = {"Plus", "Dot", "Circle"},
     Default = "Plus",
-    Callback = function(v) Crosshair.Style = v end
+    Callback = function(v)
+        Crosshair.Style = v
+        if Crosshair.Enabled then
+            CreateGUICrosshair()
+        end
+    end
 })
 SubCrosshair:AddSlider({
     Name = "Position X",
@@ -4191,7 +4244,7 @@ SubUIMenu:AddButton({
 -- ============================================================
 Window:Notify({
     Title = "Wisnu Hub",
-    Content = "Violence District Loaded! (Hide Name + Silent Aim + Item ESP + Fitur Tambahan)",
+    Content = "Violence District Loaded! (Hide Name + Silent Aim + Item ESP)",
     Type = "success",
     Duration = 4
 })
@@ -4218,7 +4271,7 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
-print("✅ Wisnu Hub - Violence District UI Migrated + Item ESP + Fitur Tambahan (Anti Aura, Silent Actions, Auto Attack, Double Damage, Notify Stun)")
+print("✅ Wisnu Hub - Violence District UI Migrated + Item ESP Added + Cleanup Fixes!")
 end
 
 -- 4. JALANKAN SISTEM KEY
