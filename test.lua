@@ -1017,6 +1017,89 @@ RayParams.FilterType = Enum.RaycastFilterType.Blacklist
 
 local EmoteRemote = Remotes:WaitForChild("EmoteHandler")
 
+-- ============== ITEM ESP (BARU) ==============
+local ItemESP_Guis = {}  -- Menyimpan BillboardGui per player
+
+local function updateItemESP(player)
+    -- Jika ESP Status dimatikan atau ShowItem false, hapus semua gui
+    if not ESPStatus.Enabled or not ESPStatus.ShowItem then
+        for _, gui in pairs(ItemESP_Guis) do
+            if gui and gui.Parent then gui:Destroy() end
+        end
+        ItemESP_Guis = {}
+        return
+    end
+
+    local char = player.Character
+    if not char then
+        if ItemESP_Guis[player] then
+            ItemESP_Guis[player]:Destroy()
+            ItemESP_Guis[player] = nil
+        end
+        return
+    end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        if ItemESP_Guis[player] then
+            ItemESP_Guis[player]:Destroy()
+            ItemESP_Guis[player] = nil
+        end
+        return
+    end
+
+    local root = getRoot()
+    if not root then return end
+
+    local dist = (hrp.Position - root.Position).Magnitude
+    if dist > ESPStatus.Radius then
+        if ItemESP_Guis[player] then
+            ItemESP_Guis[player]:Destroy()
+            ItemESP_Guis[player] = nil
+        end
+        return
+    end
+
+    local item = player:GetAttribute("EquippedItem")
+    if not item then
+        if ItemESP_Guis[player] then
+            ItemESP_Guis[player]:Destroy()
+            ItemESP_Guis[player] = nil
+        end
+        return
+    end
+
+    -- Buat atau perbarui BillboardGui
+    local gui = ItemESP_Guis[player]
+    if not gui then
+        gui = Instance.new("BillboardGui")
+        gui.Name = "ItemESP"
+        gui.Size = UDim2.new(0, 120, 0, 30)
+        gui.Adornee = hrp
+        gui.StudsOffset = Vector3.new(0, 3.8, 0)  -- di atas kepala
+        gui.AlwaysOnTop = true
+        gui.Parent = hrp
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = ""
+        label.TextColor3 = Color3.fromRGB(255, 255, 100)
+        label.TextStrokeTransparency = 0.3
+        label.Font = Enum.Font.GothamBold
+        label.TextSize = 14
+        label.TextScaled = true
+        label.Parent = gui
+
+        ItemESP_Guis[player] = gui
+    end
+
+    local label = gui:FindFirstChildOfClass("TextLabel")
+    if label then
+        label.Text = "🛠 " .. item
+    end
+end
+
 -- ============== BACKEND FUNCTIONS (dari vidijembot.txt) ==============
 
 local function TeleportToPart(part)
@@ -2068,7 +2151,7 @@ local function getClosestGunTarget()
     local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
     local closest, shortest = nil, GunAim.FOV
 
-    for _, p in pairs(Players:GetPlayers()) do
+    for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Team then
             local valid = (GunAim.TargetMode == "Killer" and p.Team.Name == "Killer")
                        or (GunAim.TargetMode == "Survivor" and p.Team.Name == "Survivors")
@@ -3096,6 +3179,13 @@ RunService.RenderStepped:Connect(function()
         updateParryCircle()
     end
     
+    -- ===== ITEM ESP =====
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            updateItemESP(p)
+        end
+    end
+
     drawCrosshair()
     UpdateThirdPerson()
     
