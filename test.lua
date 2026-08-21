@@ -43,7 +43,7 @@ local function MainScript()
 -- ============================================================
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Naellx/Oxidelib/main/Oxidelib.lua"))()
 if not Library then return warn("Oxidelib gagal dimuat") end
-Library:SetTheme("Ocean")
+Library:SetTheme("OLED")  -- Gunakan tema standar yang dikenali
 
 local MY_LOGO = "rbxassetid://91006203868530"
 
@@ -68,13 +68,13 @@ task.spawn(function()
     end
 end)
 
--- Mobile Bubble (hanya satu)
+-- Mobile Bubble (hanya satu, hapus jika sudah ada)
 task.spawn(function()
     pcall(function()
         local sg = Window.ScreenGui
         if not sg then return end
 
-        -- Hapus bubble lama jika ada
+        -- Hapus bubble lama jika ada (untuk mencegah duplikasi)
         local oldBubble = sg:FindFirstChild("WisnuMobileBubble")
         if oldBubble then oldBubble:Destroy() end
 
