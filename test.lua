@@ -11,7 +11,7 @@ Onyx.Appearance = {
     Subtitle = "Enter your key to continue",
     KeylessTitle = "Wisnu Hub",
     KeylessSubtitle = "No key required for this build - you're verified.",
-    Icon = "rbxassetid://91006203868530",
+    Icon = "rbxassetid://910062038685",
 }
 
 Onyx.Links = {
@@ -43,9 +43,9 @@ local function MainScript()
 -- ============================================================
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Naellx/Oxidelib/main/Oxidelib.lua"))()
 if not Library then return warn("Oxidelib gagal dimuat") end
-Library:SetTheme("Dark")  -- Tema standar
+Library:SetTheme("Dark")
 
-local MY_LOGO = "rbxassetid://91006203868530"
+local MY_LOGO = "rbxassetid://910062038685"
 
 -- Buat Jendela Utama dengan judul "Violance distrik"
 local Window = Library:CreateWindow({
@@ -68,13 +68,12 @@ task.spawn(function()
     end
 end)
 
--- Mobile Bubble (hanya satu, hapus jika sudah ada)
+-- Mobile Bubble (hanya satu)
 task.spawn(function()
     pcall(function()
         local sg = Window.ScreenGui
         if not sg then return end
 
-        -- Hapus bubble lama jika ada (untuk mencegah duplikasi)
         local oldBubble = sg:FindFirstChild("WisnuMobileBubble")
         if oldBubble then oldBubble:Destroy() end
 
@@ -130,7 +129,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
---  BACKEND & LOGIKA (SEMUA DARI SCRIPT ASLI)
+--  BACKEND & LOGIKA (SEMUA DARI SCRIPT ASLI) + TAMBAHAN ITEM ESP
 -- ============================================================
 -- SERVICES
 local Players        = game:GetService("Players")
@@ -193,7 +192,7 @@ local ESPStatus = {
     ShowName     = true,
     ShowDistance = true,
     ShowHealth   = false,
-    ShowItem     = true,
+    ShowItem     = true,   -- <--- Ini akan mengaktifkan Item ESP
     Radius       = 100
 }
 
@@ -710,339 +709,93 @@ local VALID_PARRY_IDS = {
 
 local Attached = {}
 
--- ============== HIDE NAME FUNCTIONS ==============
-local function shouldHideNameObject(object)
-    local ok, isTextObj = pcall(function()
-        return object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")
-    end)
-    if not ok or not isTextObj then return false end
-    local text = ""
-    pcall(function() text = tostring(object.Text or "") end)
-    return text == LocalPlayer.Name or text == LocalPlayer.DisplayName or text:find(LocalPlayer.Name, 1, true) ~= nil
-end
+-- ============================================================
+--  FUNGSI TAMBAHAN: ITEM ESP (EQUIPPED ITEM)
+-- ============================================================
+local ItemESP_Guis = {}  -- Menyimpan BillboardGui per player
 
-local function enableHideName(enabled)
-    if HideName.Connection then
-        pcall(function() HideName.Connection:Disconnect() end)
-        HideName.Connection = nil
-    end
-    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if not playerGui then return end
-    
-    local function process(object)
-        if shouldHideNameObject(object) then
-            object.Visible = not enabled
+local function updateItemESP(player)
+    -- Jika ESP Status dimatikan atau ShowItem false, hapus semua gui
+    if not ESPStatus.Enabled or not ESPStatus.ShowItem then
+        for _, gui in pairs(ItemESP_Guis) do
+            if gui and gui.Parent then gui:Destroy() end
         end
-    end
-    
-    for _, descendant in ipairs(playerGui:GetDescendants()) do
-        process(descendant)
-    end
-    
-    if enabled then
-        HideName.Connection = playerGui.DescendantAdded:Connect(function(object)
-            task.defer(process, object)
-        end)
-    end
-end
-
--- ============== SILENT AIM FUNCTIONS ==============
-local function getSilentTarget()
-    local root = getRoot()
-    if not root then return nil end
-    local myPos = root.Position
-    local cam = workspace.CurrentCamera
-    if not cam then return nil end
-    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-    local best, bestDist = nil, SilentAim.FOV
-
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p == LocalPlayer then continue end
-        local char = p.Character
-        if not char then continue end
-
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
-
-        local valid = false
-        if SilentAim.TargetMode == "Killer" and p.Team and p.Team.Name == "Killer" then
-            valid = true
-        elseif SilentAim.TargetMode == "Survivor" and p.Team and p.Team.Name == "Survivors" then
-            valid = true
-        elseif SilentAim.TargetMode == "SCP" then
-            for obj in pairs(ESPCache.SCP) do
-                if obj and obj.Parent then
-                    valid = true
-                    break
-                end
-            end
-        end
-        if not valid then continue end
-
-        local part = char:FindFirstChild(SilentAim.TargetPart)
-        if not part then
-            part = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
-        end
-        if not part or not part:IsA("BasePart") then continue end
-
-        local targetPos = part.Position
-
-        if SilentAim.Prediction then
-            local success, vel = pcall(function()
-                return part.AssemblyLinearVelocity
-            end)
-            if success and vel and type(vel) == "Vector3" then
-                local dist = (targetPos - myPos).Magnitude
-                if dist > 0 then
-                    local travelTime = dist / SilentAim.BulletSpeed
-                    targetPos = targetPos + vel * (travelTime * SilentAim.PredictStrength)
-                end
-            end
-        end
-
-        -- Visibility check (raycast from camera)
-        local rayParams = RaycastParams.new()
-        rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-        rayParams.FilterDescendantsInstances = { LocalPlayer.Character, char }
-        local direction = targetPos - cam.CFrame.Position
-        local result = workspace:Raycast(cam.CFrame.Position, direction, rayParams)
-        if result then
-            continue
-        end
-
-        local screenPos, onScreen = cam:WorldToViewportPoint(targetPos)
-        if onScreen then
-            local distFromCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-            if distFromCenter < bestDist and distFromCenter <= SilentAim.FOV then
-                local worldDist = (targetPos - myPos).Magnitude
-                if worldDist <= SilentAim.Distance then
-                    bestDist = distFromCenter
-                    best = part
-                end
-            end
-        end
-    end
-
-    return best
-end
-
-local function setupSilentAimHook()
-    if silentHookActive then return end
-    local castTable = nil
-    for i, v in pairs(getgc(true)) do
-        if type(v) == "table" and rawget(v, "cast") then
-            castTable = v
-            break
-        end
-    end
-    if not castTable then
-        Window:Notify({ Title = "Silent Aim Error", Content = "Fungsi 'cast' tidak ditemukan", Type = "warning", Duration = 3 })
+        ItemESP_Guis = {}
         return
     end
-    silentOriginalCast = castTable.cast
-    if not silentOriginalCast then return end
-    silentHookActive = true
-    castTable.cast = function(p1, p2, p3)
-        if SilentAim.Enabled then
-            local target = getSilentTarget()
-            if target and target:IsA("BasePart") and target.Parent then
-                return target, target.Position, Vector3.new(0,1,0), target.Material
-            end
+
+    local char = player.Character
+    if not char then
+        if ItemESP_Guis[player] then
+            ItemESP_Guis[player]:Destroy()
+            ItemESP_Guis[player] = nil
         end
-        return silentOriginalCast(p1, p2, p3)
+        return
     end
-    Window:Notify({ Title = "Silent Aim", Content = "Hook installed!", Type = "success", Duration = 2 })
-end
 
-local function removeSilentAimHook()
-    if not silentHookActive then return end
-    local castTable = nil
-    for i, v in pairs(getgc(true)) do
-        if type(v) == "table" and rawget(v, "cast") then
-            castTable = v
-            break
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        if ItemESP_Guis[player] then
+            ItemESP_Guis[player]:Destroy()
+            ItemESP_Guis[player] = nil
         end
+        return
     end
-    if castTable and silentOriginalCast then
-        castTable.cast = silentOriginalCast
-    end
-    silentHookActive = false
-    silentOriginalCast = nil
-    Window:Notify({ Title = "Silent Aim", Content = "Hook removed", Type = "warning", Duration = 2 })
-end
 
-function IsSafeToParry(char)
-    if not Config.Surv_ParrySafety then return true end
-    if not char then return false end
-    
-    local interactObj = char:FindFirstChild("CheckInterractable")
-    
-    if interactObj then
-        if interactObj:GetAttribute("isVaulting") == true then return false end
-        if interactObj:GetAttribute("isRepairing") == true then return false end
-        if interactObj:GetAttribute("isUnhooking") == true then return false end
-        if interactObj:GetAttribute("isHealing") == true then return false end
-        if interactObj:GetAttribute("isSliding") == true then return false end
-    end
-    
-    return true 
-end
+    local root = getRoot()
+    if not root then return end
 
-function TriggerCrouch()
-    pcall(function()
-        local b = LocalPlayer:FindFirstChild("PlayerGui")
-
-        for segment in string.gmatch("Survivor-mob.Controls.crouch.icon", "[^%.]+") do
-            if b then
-                b = b:FindFirstChild(segment)
-            end
+    local dist = (hrp.Position - root.Position).Magnitude
+    if dist > ESPStatus.Radius then
+        if ItemESP_Guis[player] then
+            ItemESP_Guis[player]:Destroy()
+            ItemESP_Guis[player] = nil
         end
-
-        if b and b:IsA("GuiObject") and b.Visible and b.Parent and b.Parent:IsA("GuiButton") then
-            local btn = b.Parent
-
-            if UserInputService.TouchEnabled and type(firesignal) == "function" then
-                firesignal(btn.MouseButton1Click)
-                task.wait(2)
-                firesignal(btn.MouseButton1Click)
-            else
-                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
-                task.wait(2)
-                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
-            end
-        else
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
-            task.wait(2)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
-        end
-    end)
-end
-function isWeapon(obj)
-    if obj:IsA("Tool") then return true end
-    if obj.Parent and armParts[obj.Parent.Name] then return true end
-    local name = obj.Name:lower()
-    if name:match("weapon") or name:match("gun") or name:match("blade") then return true end
-    return false
-end
-function GetRole()
-    if not LocalPlayer.Team then return "Unknown" end
-    local name = LocalPlayer.Team.Name
-    if name == "Killer" then return "Killer"
-    elseif name == "Survivors" then return "Survivor"
-    else return "Spectator" end
-end
-function IsSurvivor(p) return p and p.Team and p.Team.Name == "Survivors" end
-function IsKiller(p) return p and p.Team and p.Team.Name == "Killer" end
-function IsDowned(char)
-    if not char then return false end
-    return char:GetAttribute("Knocked") == true or char:GetAttribute("IsHooked") == true
-end
-
-function faceTarget(targetPart, smoothness)
-    if not targetPart then return end
-    smoothness = smoothness or 0.1
-    local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
-    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, smoothness)
-end
-function GetDistance(pos) 
-    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not root then return math.huge end
-    return (pos - root.Position).Magnitude 
-end
-
-local function getRoot()
-    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-end
-
-function GetClosestEnemy()
-    local closest = nil
-    local shortest = AttackRange
-    local myChar = player.Character
-    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return nil end
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = plr.Character.HumanoidRootPart
-            local team = plr.Team and plr.Team.Name:lower() or ""
-            if team ~= (player.Team and player.Team.Name:lower()) then
-                local dist = (hrp.Position - myHRP.Position).Magnitude
-                if dist < shortest then 
-                    shortest = dist 
-                    closest = plr 
-                end
-            end
-        end
+        return
     end
-    return closest, shortest
+
+    local item = player:GetAttribute("EquippedItem")
+    if not item then
+        if ItemESP_Guis[player] then
+            ItemESP_Guis[player]:Destroy()
+            ItemESP_Guis[player] = nil
+        end
+        return
+    end
+
+    -- Buat atau perbarui BillboardGui
+    local gui = ItemESP_Guis[player]
+    if not gui then
+        gui = Instance.new("BillboardGui")
+        gui.Name = "ItemESP"
+        gui.Size = UDim2.new(0, 120, 0, 30)
+        gui.Adornee = hrp
+        gui.StudsOffset = Vector3.new(0, 3.8, 0)  -- di atas kepala
+        gui.AlwaysOnTop = true
+        gui.Parent = hrp
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = ""
+        label.TextColor3 = Color3.fromRGB(255, 255, 100)
+        label.TextStrokeTransparency = 0.3
+        label.Font = Enum.Font.GothamBold
+        label.TextSize = 14
+        label.TextScaled = true
+        label.Parent = gui
+
+        ItemESP_Guis[player] = gui
+    end
+
+    local label = gui:FindFirstChildOfClass("TextLabel")
+    if label then
+        label.Text = "🛠 " .. item
+    end
 end
-
-local KillerAnims = {
-    ["rbxassetid://105374834496520"] = true,
-    ["rbxassetid://113255068724446"] = true,
-    ["rbxassetid://118907603246885"] = true,
-    ["rbxassetid://129784271201071"] = true,
-    ["rbxassetid://117042998468241"] = true,
-    ["rbxassetid://122812055447896"] = true,
-    ["rbxassetid://78935059863801"]  = true,
-    ["rbxassetid://74968262036854"]  = true,
-    ["rbxassetid://78432063483146"]  = true,
-    ["rbxassetid://132817836308238"] = true,
-    ["rbxassetid://133963973694098"] = true,
-    ["rbxassetid://111920872708571"] = true,
-    ["rbxassetid://80411309607666"]  = true,
-    ["rbxassetid://98163597193511"]  = true,
-    ["rbxassetid://82666958311998"]  = true,
-    ["rbxassetid://110355011987939"] = true,
-    ["rbxassetid://139369275981139"] = true,
-    ["rbxassetid://135002183282873"] = true,
-    ["rbxassetid://121216847022485"] = true,
-    ["rbxassetid://130593238885843"] = true,
-    ["rbxassetid://117070354890871"] = true,
-    ["rbxassetid://106871536134254"] = true,
-    ["rbxassetid://138720291317243"] = true
-}
-
-local hookedKillers = {}
-local VaultTracks   = {}
-local CrosshairDrawings = {}
-local DisabledEffects   = {}
-
-local AttackPaths = {
-    "Slasher-mob.Controls.attack",
-    "Masked-mob.Controls.attack",
-    "Killer-mob.Controls.attack"
-}
-
-local ScreenEffectTypes = {
-    "ColorCorrectionEffect",
-    "DepthOfFieldEffect",
-    "BlurEffect",
-    "SunRaysEffect",
-    "BloomEffect"
-}
-
-local EmoteList = {
-    "Mannrobics", "Arm Swing", "Schadenfreude", "Kyoufuu",
-    "Backflip", "Griddy", "Friday Night", "Floating Rest",
-    "OnePlays", "Quick Combo", "WarCry", "Wave"
-}
-
-local GeneratorColor = Color3.fromRGB(255, 170, 0)
-local PalletColor    = Color3.fromRGB(74, 255, 181)
-local WindowColor    = Color3.fromRGB(74, 255, 181)
-local SCPColor       = Color3.fromRGB(255, 0, 0)
-
-local PARRY_DEBOUNCE = 0.2
-local TouchID        = 8822
-local ActionPath     = "Survivor-mob.Controls.action.check"
-
-local RayParams = RaycastParams.new()
-RayParams.FilterType = Enum.RaycastFilterType.Blacklist
-
-local EmoteRemote = Remotes:WaitForChild("EmoteHandler")
 
 -- ============================================================
---  UI STRUKTUR (OXIDELIB - GROWAGARDEN2) - DIPERBAIKI
+--  UI STRUKTUR (OXIDELIB - GROWAGARDEN2)
 -- ============================================================
 
 local TabPlayer = Window:AddTab({ Name = "Player", Icon = "user" })
@@ -1072,7 +825,7 @@ local TabUISettings = Window:AddTab({ Name = "UI Settings", Icon = "settings" })
 local SubUIMenu = TabUISettings:AddSubTab("Menu")
 
 -- ============================================================
---  UI ELEMENTS (SEMUA FITUR) - HAPUS ColorPicker & perbaiki Keybind
+--  UI ELEMENTS (SEMUA FITUR)
 -- ============================================================
 
 -- ===== PLAYER / SURVIVOR =====
@@ -1162,7 +915,7 @@ local HideNameToggle = SubSurvivor:AddToggle({
         enableHideName(v)
     end
 })
--- Keybind untuk Hide Name (ganti default ke F4 agar tidak bentrok)
+-- Keybind untuk Hide Name
 SubSurvivor:AddKeybind({
     Name = "Hide Name Keybind",
     Default = Enum.KeyCode.F4,
@@ -1417,7 +1170,7 @@ local AutoParryToggle = SubParry:AddToggle({
     Default = false,
     Callback = function(v) Config.Surv_AutoParry = v end
 })
--- Keybind Auto Parry (gunakan tombol yang tidak mengganggu)
+-- Keybind Auto Parry
 SubParry:AddKeybind({
     Name = "Auto Parry Key",
     Default = Enum.KeyCode.LeftAlt,
@@ -1513,7 +1266,7 @@ local CrosshairToggle = SubCrosshair:AddToggle({
     Default = false,
     Callback = function(v) Crosshair.Enabled = v end
 })
--- Hapus AddColorPicker
+-- Hapus ColorPicker
 SubCrosshair:AddDropdown({
     Name = "Style",
     Options = {"Plus", "Dot", "Circle"},
@@ -1542,7 +1295,7 @@ local SurvivorESP = SubESPCham:AddToggle({
     Default = false,
     Callback = function(v) ESP.Survivor = v end
 })
--- Hapus AddColorPicker
+-- Hapus ColorPicker
 
 local KillerESP = SubESPCham:AddToggle({
     Name = "ESP Killer",
@@ -1587,7 +1340,16 @@ SubESPStatus:AddSection("ESP Status")
 SubESPStatus:AddToggle({
     Name = "Enable Status ESP",
     Default = false,
-    Callback = function(v) ESPStatus.Enabled = v end
+    Callback = function(v)
+        ESPStatus.Enabled = v
+        if not v then
+            -- Hapus semua Item ESP jika dimatikan
+            for _, gui in pairs(ItemESP_Guis) do
+                if gui and gui.Parent then gui:Destroy() end
+            end
+            ItemESP_Guis = {}
+        end
+    end
 })
 SubESPStatus:AddToggle({
     Name = "Show Name",
@@ -3002,7 +2764,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ESP Update loop
+-- ESP Update loop + Item ESP
 RunService.RenderStepped:Connect(function()
     local root = getRoot()
     if not root then return end
@@ -3012,6 +2774,7 @@ RunService.RenderStepped:Connect(function()
     if now - Timers.lastESPUpdate >= 0.05 then
         Timers.lastESPUpdate = now
 
+        -- Update ESP Cham (yang sudah ada)
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character then
                 local char = p.Character
@@ -3052,6 +2815,14 @@ RunService.RenderStepped:Connect(function()
         updateParryCircle()
     end
     
+    -- ===== ITEM ESP =====
+    -- Update item ESP untuk semua player
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            updateItemESP(p)
+        end
+    end
+
     drawCrosshair()
     UpdateThirdPerson()
     
@@ -3184,14 +2955,14 @@ end
 -- ============================================================
 Window:Notify({
     Title = "Wisnu Hub",
-    Content = "Violence District Loaded! (Hide Name + Silent Aim)",
+    Content = "Violence District Loaded! (Hide Name + Silent Aim + Item ESP)",
     Type = "success",
     Duration = 4
 })
 
 Window:SaveConfig()
 
-print("✅ Wisnu Hub - Violence District UI Migrated!")
+print("✅ Wisnu Hub - Violence District UI Migrated + Item ESP Added!")
 end
 
 -- 4. JALANKAN SISTEM KEY
