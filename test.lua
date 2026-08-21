@@ -43,7 +43,7 @@ local function MainScript()
 -- ============================================================
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Naellx/Oxidelib/main/Oxidelib.lua"))()
 if not Library then return warn("Oxidelib gagal dimuat") end
-Library:SetTheme("Dark")  -- Gunakan tema standar yang dikenali ("Dark" atau "OLED")
+Library:SetTheme("Dark")  -- Tema standar
 
 local MY_LOGO = "rbxassetid://91006203868530"
 
@@ -1042,7 +1042,7 @@ RayParams.FilterType = Enum.RaycastFilterType.Blacklist
 local EmoteRemote = Remotes:WaitForChild("EmoteHandler")
 
 -- ============================================================
---  UI STRUKTUR (OXIDELIB - GROWAGARDEN2)
+--  UI STRUKTUR (OXIDELIB - GROWAGARDEN2) - DIPERBAIKI
 -- ============================================================
 
 local TabPlayer = Window:AddTab({ Name = "Player", Icon = "user" })
@@ -1072,7 +1072,7 @@ local TabUISettings = Window:AddTab({ Name = "UI Settings", Icon = "settings" })
 local SubUIMenu = TabUISettings:AddSubTab("Menu")
 
 -- ============================================================
---  UI ELEMENTS (SEMUA FITUR) - DIPERBAIKI dengan AddKeybind
+--  UI ELEMENTS (SEMUA FITUR) - HAPUS ColorPicker & perbaiki Keybind
 -- ============================================================
 
 -- ===== PLAYER / SURVIVOR =====
@@ -1153,7 +1153,7 @@ SubSurvivor:AddToggle({
     Callback = function(v) PlayerMods.AntiVault = v end
 })
 
--- Hide Name (di Survivor) - tanpa keypicker, diganti dengan keybind terpisah
+-- Hide Name (tanpa ColorPicker)
 local HideNameToggle = SubSurvivor:AddToggle({
     Name = "Hide Name (Streamer Mode)",
     Default = false,
@@ -1162,14 +1162,13 @@ local HideNameToggle = SubSurvivor:AddToggle({
         enableHideName(v)
     end
 })
--- Tambahkan keybind untuk toggle Hide Name
+-- Keybind untuk Hide Name (ganti default ke F4 agar tidak bentrok)
 SubSurvivor:AddKeybind({
     Name = "Hide Name Keybind",
-    Default = Enum.KeyCode.F3,
+    Default = Enum.KeyCode.F4,
     OnPress = function()
         HideName.Enabled = not HideName.Enabled
         enableHideName(HideName.Enabled)
-        -- Update toggle secara visual tidak bisa, tapi state internal berubah
         Window:Notify({ Title = "Hide Name", Content = tostring(HideName.Enabled and "Enabled" or "Disabled"), Type = "info", Duration = 1 })
     end
 })
@@ -1418,10 +1417,10 @@ local AutoParryToggle = SubParry:AddToggle({
     Default = false,
     Callback = function(v) Config.Surv_AutoParry = v end
 })
--- Keybind terpisah untuk Auto Parry
+-- Keybind Auto Parry (gunakan tombol yang tidak mengganggu)
 SubParry:AddKeybind({
     Name = "Auto Parry Key",
-    Default = Enum.KeyCode.None,
+    Default = Enum.KeyCode.LeftAlt,
     OnPress = function()
         Config.Surv_AutoParry = not Config.Surv_AutoParry
         Window:Notify({ Title = "Auto Parry", Content = tostring(Config.Surv_AutoParry and "Enabled" or "Disabled"), Type = "info", Duration = 1 })
@@ -1492,7 +1491,7 @@ local FakeParryToggle = SubParry:AddToggle({
         end
     end
 })
--- Keybind untuk Fake Parry
+-- Keybind Fake Parry
 SubParry:AddKeybind({
     Name = "Fake Parry Key",
     Default = Enum.KeyCode.G,
@@ -1514,11 +1513,7 @@ local CrosshairToggle = SubCrosshair:AddToggle({
     Default = false,
     Callback = function(v) Crosshair.Enabled = v end
 })
-CrosshairToggle:AddColorPicker({
-    Name = "Crosshair Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Callback = function(v) Crosshair.Color = v end
-})
+-- Hapus AddColorPicker
 SubCrosshair:AddDropdown({
     Name = "Style",
     Options = {"Plus", "Dot", "Circle"},
@@ -1547,21 +1542,12 @@ local SurvivorESP = SubESPCham:AddToggle({
     Default = false,
     Callback = function(v) ESP.Survivor = v end
 })
-SurvivorESP:AddColorPicker({
-    Name = "Survivor Color",
-    Default = TeamColors.Survivor,
-    Callback = function(v) TeamColors.Survivor = v end
-})
+-- Hapus AddColorPicker
 
 local KillerESP = SubESPCham:AddToggle({
     Name = "ESP Killer",
     Default = false,
     Callback = function(v) ESP.Killer = v end
-})
-KillerESP:AddColorPicker({
-    Name = "Killer Color",
-    Default = TeamColors.Killer,
-    Callback = function(v) TeamColors.Killer = v end
 })
 
 local ESPGeneratorToggle = SubESPCham:AddToggle({
@@ -1569,21 +1555,11 @@ local ESPGeneratorToggle = SubESPCham:AddToggle({
     Default = false,
     Callback = function(v) ESP.Generator = v end
 })
-ESPGeneratorToggle:AddColorPicker({
-    Name = "Generator Color",
-    Default = GeneratorColor,
-    Callback = function(v) GeneratorColor = v end
-})
 
 local ESPSCPToggle = SubESPCham:AddToggle({
     Name = "SCP",
     Default = false,
     Callback = function(v) ESP.SCP = v end
-})
-ESPSCPToggle:AddColorPicker({
-    Name = "SCP Color",
-    Default = SCPColor,
-    Callback = function(v) SCPColor = v end
 })
 
 local ESPPalletToggle = SubESPCham:AddToggle({
@@ -1591,21 +1567,11 @@ local ESPPalletToggle = SubESPCham:AddToggle({
     Default = false,
     Callback = function(v) ESP.Pallet = v end
 })
-ESPPalletToggle:AddColorPicker({
-    Name = "Pallet Color",
-    Default = PalletColor,
-    Callback = function(v) PalletColor = v end
-})
 
 local ESPWindowToggle = SubESPCham:AddToggle({
     Name = "Window",
     Default = false,
     Callback = function(v) ESP.Window = v end
-})
-ESPWindowToggle:AddColorPicker({
-    Name = "Window Color",
-    Default = WindowColor,
-    Callback = function(v) WindowColor = v end
 })
 
 SubESPCham:AddSlider({
