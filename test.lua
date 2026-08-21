@@ -43,7 +43,7 @@ local function MainScript()
 -- ============================================================
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Naellx/Oxidelib/main/Oxidelib.lua"))()
 if not Library then return warn("Oxidelib gagal dimuat") end
-Library:SetTheme("OLED")  -- Gunakan tema standar yang dikenali
+Library:SetTheme("Dark")  -- Gunakan tema standar yang dikenali ("Dark" atau "OLED")
 
 local MY_LOGO = "rbxassetid://91006203868530"
 
@@ -1072,7 +1072,7 @@ local TabUISettings = Window:AddTab({ Name = "UI Settings", Icon = "settings" })
 local SubUIMenu = TabUISettings:AddSubTab("Menu")
 
 -- ============================================================
---  UI ELEMENTS (SEMUA FITUR)
+--  UI ELEMENTS (SEMUA FITUR) - DIPERBAIKI dengan AddKeybind
 -- ============================================================
 
 -- ===== PLAYER / SURVIVOR =====
@@ -1153,7 +1153,7 @@ SubSurvivor:AddToggle({
     Callback = function(v) PlayerMods.AntiVault = v end
 })
 
--- Hide Name (di Survivor)
+-- Hide Name (di Survivor) - tanpa keypicker, diganti dengan keybind terpisah
 local HideNameToggle = SubSurvivor:AddToggle({
     Name = "Hide Name (Streamer Mode)",
     Default = false,
@@ -1162,13 +1162,15 @@ local HideNameToggle = SubSurvivor:AddToggle({
         enableHideName(v)
     end
 })
-HideNameToggle:AddKeyPicker({
+-- Tambahkan keybind untuk toggle Hide Name
+SubSurvivor:AddKeybind({
     Name = "Hide Name Keybind",
-    Default = "F3",
-    Mode = "Toggle",
-    Callback = function(v)
-        HideName.Enabled = v
-        enableHideName(v)
+    Default = Enum.KeyCode.F3,
+    OnPress = function()
+        HideName.Enabled = not HideName.Enabled
+        enableHideName(HideName.Enabled)
+        -- Update toggle secara visual tidak bisa, tapi state internal berubah
+        Window:Notify({ Title = "Hide Name", Content = tostring(HideName.Enabled and "Enabled" or "Disabled"), Type = "info", Duration = 1 })
     end
 })
 
@@ -1416,11 +1418,14 @@ local AutoParryToggle = SubParry:AddToggle({
     Default = false,
     Callback = function(v) Config.Surv_AutoParry = v end
 })
-AutoParryToggle:AddKeyPicker({
+-- Keybind terpisah untuk Auto Parry
+SubParry:AddKeybind({
     Name = "Auto Parry Key",
-    Default = "None",
-    Mode = "Toggle",
-    Callback = function(v) Config.Surv_AutoParry = v end
+    Default = Enum.KeyCode.None,
+    OnPress = function()
+        Config.Surv_AutoParry = not Config.Surv_AutoParry
+        Window:Notify({ Title = "Auto Parry", Content = tostring(Config.Surv_AutoParry and "Enabled" or "Disabled"), Type = "info", Duration = 1 })
+    end
 })
 SubParry:AddToggle({
     Name = "Safety Parry",
@@ -1487,11 +1492,11 @@ local FakeParryToggle = SubParry:AddToggle({
         end
     end
 })
-FakeParryToggle:AddKeyPicker({
+-- Keybind untuk Fake Parry
+SubParry:AddKeybind({
     Name = "Fake Parry Key",
-    Default = "G",
-    Mode = "Toggle",
-    Callback = function()
+    Default = Enum.KeyCode.G,
+    OnPress = function()
         if FakeParry.Enabled then PlayFakeParry() end
     end
 })
@@ -1901,11 +1906,10 @@ SubUIMenu:AddToggle({
 SubUIMenu:AddDivider()
 SubUIMenu:AddSection("Keybinds")
 SubUIMenu:AddLabel({ Text = "Menu Bind" })
-SubUIMenu:AddKeyPicker({
+SubUIMenu:AddKeybind({
     Name = "Menu Keybind",
-    Default = "RightShift",
-    Mode = "Toggle",
-    Callback = function(v) Window:ToggleUI() end
+    Default = Enum.KeyCode.RightShift,
+    OnPress = function() Window:ToggleUI() end
 })
 SubUIMenu:AddDivider()
 SubUIMenu:AddButton({
@@ -1918,7 +1922,7 @@ SubUIMenu:AddButton({
 })
 
 -- ============================================================
---  BACKEND FUNCTIONS (SEMUA YANG HILANG)
+--  BACKEND FUNCTIONS (SEMUA YANG HILANG) - TIDAK DIUBAH
 -- ============================================================
 
 -- Teleport functions
