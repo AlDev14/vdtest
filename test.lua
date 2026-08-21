@@ -39,7 +39,7 @@ local function MainScript()
     print("✅ Key valid! Script loaded!")
 
 -- ============================================================
---  LOAD UI LIBRARY (Oxidelib) + GAYA GROWAGARDEN2
+--  LOAD UI LIBRARY (Oxidelib) + GAYA VIOLENCE DISTRICT
 -- ============================================================
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Naellx/Oxidelib/main/Oxidelib.lua"))()
 if not Library then return warn("Oxidelib gagal dimuat") end
@@ -59,7 +59,7 @@ local Window = Library:CreateWindow({
     LoadingSubtitle = "Loading Violent Engine...",
 })
 
--- Watermark
+-- Watermark Logo
 task.spawn(function()
     task.wait(0.5)
     if Window.Watermark then
@@ -67,7 +67,7 @@ task.spawn(function()
     end
 end)
 
--- Mobile Bubble
+-- Smart Mobile Bubble
 task.spawn(function()
     pcall(function()
         local sg = Window.ScreenGui
@@ -128,7 +128,892 @@ task.spawn(function()
 end)
 
 -- ============================================================
---  BACKEND & LOGIKA (SEMUA DARI SCRIPT ASLI)
+--  STRUKTUR UI OXIDELIB (SEMUA TAB & SUBTAB DARI TEST.LUA)
+-- ============================================================
+
+-- TAB 1: PLAYER
+local TabPlayer = Window:AddTab({ Name = "Player", Icon = "user" })
+local SubSurvivor = TabPlayer:AddSubTab("Survivor")
+local SubKiller   = TabPlayer:AddSubTab("Killer")
+local SubAimBot   = TabPlayer:AddSubTab("AimBot")
+local SubToF      = TabPlayer:AddSubTab("ToF")
+local SubParry    = TabPlayer:AddSubTab("Parry")
+local SubCrosshair = TabPlayer:AddSubTab("Crosshair")
+
+-- ---- Survivor ----
+SubSurvivor:AddSection("Ability")
+SubSurvivor:AddToggle({
+    Name = "Auto Skill Check",
+    Default = false,
+    Callback = function(v) Auto.SkillCheck = v; if v then startSkillCheck() end end
+})
+SubSurvivor:AddDropdown({
+    Name = "Skill Check Mode",
+    Options = {"Legit", "Instant"},
+    Default = "Legit",
+    Callback = function(v) Auto.SkillCheckMode = v end
+})
+SubSurvivor:AddToggle({
+    Name = "Boost Gen Bypass",
+    Default = false,
+    Tooltip = "Mengaktifkan bypass generator untuk repair cepat",
+    Callback = function(v)
+        setGenBypass(v)
+        if v then
+            Window:Notify({ Title = "Gen Bypass", Content = "Diaktifkan - Klik tombol BYPASS di layar (mobile)", Type = "info", Duration = 3 })
+        end
+    end
+})
+SubSurvivor:AddToggle({
+    Name = "Auto Drop Pallet",
+    Default = false,
+    Tooltip = "otomatis menjatuhkan pallet",
+    Callback = function(v) Auto.PalletDrop = v end
+})
+SubSurvivor:AddSlider({
+    Name = "Auto Pallet Distance",
+    Min = 5,
+    Max = 50,
+    Default = 6,
+    Callback = function(v) Auto.PalletDropDist = v end
+})
+SubSurvivor:AddToggle({
+    Name = "Auto Flee Killer",
+    Default = false,
+    Tooltip = "otomatis tp menjauh dari killer",
+    Callback = function(v) AutoFlee.Enabled = v end
+})
+SubSurvivor:AddToggle({
+    Name = "Anti Fall Damage",
+    Default = false,
+    Tooltip = "memblokir efek slow ketika jatuh",
+    Callback = function(v) PlayerMods.AntiFall = v end
+})
+SubSurvivor:AddToggle({
+    Name = "Anti KnockDown",
+    Default = false,
+    Tooltip = "memaksa berdiri ketika KnockDown",
+    Callback = function(v) PlayerMods.GodMode = v end
+})
+SubSurvivor:AddToggle({
+    Name = "Fast Vault",
+    Default = false,
+    Tooltip = "percepat animasi lompat",
+    Callback = function(v) FastVault.Enabled = v end
+})
+SubSurvivor:AddSlider({
+    Name = "Vault Animation Speed",
+    Min = 1,
+    Max = 5,
+    Default = 1.2,
+    Callback = function(v) FastVault.Speed = v end
+})
+SubSurvivor:AddToggle({
+    Name = "Disable Local Vault",
+    Default = false,
+    Tooltip = "Mencegah karaktermu melakukan vault",
+    Callback = function(v) PlayerMods.AntiVault = v end
+})
+local HideNameToggle = SubSurvivor:AddToggle({
+    Name = "Hide Name (Streamer Mode)",
+    Default = false,
+    Callback = function(v)
+        HideName.Enabled = v
+        enableHideName(v)
+    end
+})
+HideNameToggle:AddKeyPicker({
+    Name = "Hide Name Keybind",
+    Default = "F3",
+    Mode = "Toggle",
+    Callback = function(v)
+        HideName.Enabled = v
+        enableHideName(v)
+    end
+})
+SubSurvivor:AddDivider()
+SubSurvivor:AddButton({ Name = "Instan Escape (Finish Line)", Callback = function() teleportToFinishLine() end })
+
+-- ---- Killer ----
+SubKiller:AddSection("Killer Abilities")
+SubKiller:AddToggle({
+    Name = "Block All Vaults (Entity Blocker)",
+    Default = false,
+    Tooltip = "memicu Entity Blocker (Mencegah Survivor Vault)",
+    Callback = function(v) Killer.BlockVaults = v end
+})
+SubKiller:AddToggle({
+    Name = "Anti Blind (Flashlight)",
+    Default = false,
+    Callback = function(v) Killer.AntiBlind = v end
+})
+SubKiller:AddToggle({
+    Name = "Auto Stalk (Myers)",
+    Default = false,
+    Callback = function(v)
+        AutoStalk.Enabled = v
+        if v then startAutoStalk() else stopAutoStalk() end
+    end
+})
+SubKiller:AddToggle({
+    Name = "Bypass Cooldown (Abyss)",
+    Default = false,
+    Callback = function(v)
+        Killer.BypassCooldown = v
+        if v then
+            StartCooldownBypass()
+            Window:Notify({ Title = "Bypass Cooldown", Content = "Diaktifkan", Type = "success", Duration = 3 })
+        else
+            StopCooldownBypass()
+            Window:Notify({ Title = "Bypass Cooldown", Content = "Dinonaktifkan", Type = "warning", Duration = 3 })
+        end
+    end
+})
+SubKiller:AddToggle({
+    Name = "Bypass Leap Cooldown (Hidden)",
+    Default = false,
+    Callback = function(v)
+        Killer.BypassLeap = v
+        if v then StartLeapBypass() end
+    end
+})
+SubKiller:AddToggle({
+    Name = "Auto Kill All",
+    Default = false,
+    Callback = function(v) Killer.KillAll = v end
+})
+SubKiller:AddToggle({
+    Name = "AimLock Attack",
+    Default = false,
+    Callback = function(v) AttackAim.Enabled = v; if v then startAttackAim() end end
+})
+SubKiller:AddDropdown({
+    Name = "Aimlock Mode",
+    Options = {"Normal", "Spear"},
+    Default = "Normal",
+    Callback = function(v) State.AttackAimMode = v end
+})
+SubKiller:AddSlider({
+    Name = "Spear Gravity",
+    Min = 10,
+    Max = 200,
+    Default = 50,
+    Callback = function(v) SpearAim.Gravity = v end
+})
+SubKiller:AddSlider({
+    Name = "Spear Speed",
+    Min = 20,
+    Max = 300,
+    Default = 100,
+    Callback = function(v) SpearAim.Speed = v end
+})
+SubKiller:AddDivider()
+SubKiller:AddDropdown({
+    Name = "Select Masked Power",
+    Options = MaskedPowers,
+    Default = "Cobra",
+    Callback = function(v) Masked.CurrentPower = v end
+})
+SubKiller:AddButton({ Name = "Activate Power", Callback = function()
+    local Event = ReplicatedStorage:FindFirstChild("Remotes", true)
+        and ReplicatedStorage.Remotes:FindFirstChild("Killers", true)
+        and ReplicatedStorage.Remotes.Killers:FindFirstChild("Masked", true)
+        and ReplicatedStorage.Remotes.Killers.Masked:FindFirstChild("Activatepower")
+    if Event then Event:FireServer(Masked.CurrentPower) end
+end })
+SubKiller:AddButton({ Name = "Deactivate Power", Callback = function()
+    local Event = ReplicatedStorage:FindFirstChild("Remotes", true)
+        and ReplicatedStorage.Remotes:FindFirstChild("Killers", true)
+        and ReplicatedStorage.Remotes.Killers:FindFirstChild("Masked", true)
+        and ReplicatedStorage.Remotes.Killers.Masked:FindFirstChild("Deactivatepower")
+    if Event then Event:FireServer() end
+end })
+
+-- ---- AimBot ----
+SubAimBot:AddSection("Gun AimLock")
+SubAimBot:AddToggle({
+    Name = "Aim Lock",
+    Default = false,
+    Callback = function(v) GunAim.Enabled = v end
+})
+SubAimBot:AddDropdown({
+    Name = "Target",
+    Options = {"Killer", "Survivor", "SCP"},
+    Default = "Killer",
+    Callback = function(v) GunAim.TargetMode = v end
+})
+SubAimBot:AddDropdown({
+    Name = "Aim Part",
+    Options = {"Head", "HumanoidRootPart", "Torso"},
+    Default = "HumanoidRootPart",
+    Callback = function(v) GunAim.AimPart = v end
+})
+SubAimBot:AddSlider({
+    Name = "FOV",
+    Min = 50,
+    Max = 1000,
+    Default = 250,
+    Callback = function(v) GunAim.FOV = v end
+})
+SubAimBot:AddSlider({
+    Name = "Prediction",
+    Min = 0,
+    Max = 1,
+    Default = 0.12,
+    Rounding = 2,
+    Callback = function(v) GunAim.PredictStrength = v end
+})
+SubAimBot:AddDivider()
+SubAimBot:AddSection("Silent Aim (All Weapons)")
+local SilentAimToggle = SubAimBot:AddToggle({
+    Name = "Enable Silent Aim",
+    Default = false,
+    Tooltip = "Aim tanpa gerak kamera (hook)",
+    Callback = function(v)
+        SilentAim.Enabled = v
+        if v then setupSilentAimHook() else removeSilentAimHook() end
+    end
+})
+SubAimBot:AddSlider({
+    Name = "Silent FOV",
+    Min = 30,
+    Max = 500,
+    Default = 200,
+    Callback = function(v) SilentAim.FOV = v end
+})
+SubAimBot:AddSlider({
+    Name = "Silent Distance",
+    Min = 50,
+    Max = 800,
+    Default = 400,
+    Callback = function(v) SilentAim.Distance = v end
+})
+SubAimBot:AddDropdown({
+    Name = "Silent Target",
+    Options = {"Killer", "Survivor", "SCP"},
+    Default = "Killer",
+    Callback = function(v) SilentAim.TargetMode = v end
+})
+SubAimBot:AddDropdown({
+    Name = "Silent Aim Part",
+    Options = {"HumanoidRootPart", "Head", "Torso"},
+    Default = "HumanoidRootPart",
+    Callback = function(v) SilentAim.TargetPart = v end
+})
+SubAimBot:AddToggle({
+    Name = "Enable Prediction",
+    Default = true,
+    Callback = function(v) SilentAim.Prediction = v end
+})
+SubAimBot:AddSlider({
+    Name = "Prediction Strength",
+    Min = 0,
+    Max = 50,
+    Default = 15,
+    Callback = function(v) SilentAim.PredictStrength = v / 100 end
+})
+SubAimBot:AddSlider({
+    Name = "Bullet Speed",
+    Min = 100,
+    Max = 2000,
+    Default = 800,
+    Callback = function(v) SilentAim.BulletSpeed = v end
+})
+
+-- ---- ToF ----
+SubToF:AddSection("Twist of Fate")
+SubToF:AddToggle({
+    Name = "SilentAim ToF",
+    Default = false,
+    Callback = function(v) ToFAimConfig.Enabled = v end
+})
+SubToF:AddDropdown({
+    Name = "Target",
+    Options = {"Killer", "Survivor", "SCP"},
+    Default = "Killer",
+    Callback = function(v) ToFAimConfig.TargetMode = v end
+})
+SubToF:AddDropdown({
+    Name = "Aim Part",
+    Options = {"HumanoidRootPart", "Head", "Torso"},
+    Default = "HumanoidRootPart",
+    Callback = function(v) ToFAimConfig.AimPart = v end
+})
+SubToF:AddToggle({
+    Name = "Aim Prediction",
+    Default = true,
+    Callback = function(v) ToFAimConfig.Predict = v end
+})
+SubToF:AddSlider({
+    Name = "Predict Bullet Speed",
+    Min = 50,
+    Max = 1000,
+    Default = 200,
+    Callback = function(v) ToFAimConfig.BulletSpeed = v end
+})
+SubToF:AddSlider({
+    Name = "Aim Range",
+    Min = 10,
+    Max = 300,
+    Default = 90,
+    Callback = function(v) ToFAimConfig.Range = v end
+})
+SubToF:AddSlider({
+    Name = "Safe FOV (Dot Threshold)",
+    Min = -1,
+    Max = 1,
+    Default = 0.5,
+    Rounding = 2,
+    Callback = function(v) ToFAimConfig.DotThreshold = v end
+})
+
+-- ---- Parry ----
+SubParry:AddSection("Parry Settings")
+local AutoParryToggle = SubParry:AddToggle({
+    Name = "Auto Parry",
+    Default = false,
+    Callback = function(v) Config.Surv_AutoParry = v end
+})
+AutoParryToggle:AddKeyPicker({
+    Name = "Auto Parry Key",
+    Default = "None",
+    Mode = "Toggle",
+    Callback = function(v) Config.Surv_AutoParry = v end
+})
+SubParry:AddToggle({
+    Name = "Safety Parry",
+    Default = false,
+    Callback = function(v) Config.Surv_ParrySafety = v end
+})
+SubParry:AddToggle({
+    Name = "Aggressive Mode",
+    Tooltip = "Langsung parry tanpa peduli face direction",
+    Default = false,
+    Callback = function(v) Config.Surv_ParryAggressive = v end
+})
+SubParry:AddToggle({
+    Name = "ESP Range Circle",
+    Tooltip = "Tampilkan radius jarak parry di karakter",
+    Default = true,
+    Callback = function(v) Config.Surv_ParryCircle = v end
+})
+SubParry:AddSlider({
+    Name = "Parry Radius",
+    Tooltip = "Jarak maksimal parry bereaksi",
+    Min = 5,
+    Max = 25,
+    Default = 15,
+    Callback = function(v) Config.Surv_ParryRadius = v end
+})
+SubParry:AddSlider({
+    Name = "Face Sensitivity",
+    Tooltip = "Sensitivitas arah pandang (1-10)",
+    Min = -10,
+    Max = 10,
+    Default = 7,
+    Callback = function(v) Config.Surv_ParryFace = v / 10 end
+})
+SubParry:AddDropdown({
+    Name = "Ignore Skills",
+    Options = {"Hidden S1", "Abyssal S1"},
+    Default = {},
+    Multi = true,
+    Tooltip = "Abaikan skill tertentu",
+    Callback = function(v)
+        local parsed = {}
+        for k, v2 in pairs(v) do
+            if type(k) == "string" and v2 then parsed[k] = true
+            elseif type(v2) == "string" then parsed[v2] = true end
+        end
+        Config.Ignored_Skills_List = parsed
+    end
+})
+SubParry:AddToggle({
+    Name = "Auto Crouch (Dodge S1)",
+    Tooltip = "Otomatis jongkok saat Abyssal menggunakan S1",
+    Default = false,
+    Callback = function(v) Config.Surv_AutoCrouch = v end
+})
+local FakeParryToggle = SubParry:AddToggle({
+    Name = "Enable Fake Parry",
+    Default = false,
+    Callback = function(v)
+        FakeParry.Enabled = v
+        if UserInputService.TouchEnabled then
+            if v then CreateFakeParryButton() else RemoveFakeParryButton() end
+        end
+    end
+})
+FakeParryToggle:AddKeyPicker({
+    Name = "Fake Parry Key",
+    Default = "G",
+    Mode = "Toggle",
+    Callback = function()
+        if FakeParry.Enabled then PlayFakeParry() end
+    end
+})
+SubParry:AddDropdown({
+    Name = "Fake Parry Animation",
+    Options = {"Enten", "Stopwatch", "Fih", "BloodShield"},
+    Default = "Enten",
+    Callback = function(v) FakeParry.Animation = v end
+})
+
+-- ---- Crosshair ----
+SubCrosshair:AddSection("Crosshair")
+local CrosshairToggle = SubCrosshair:AddToggle({
+    Name = "Enable Crosshair",
+    Default = false,
+    Callback = function(v) Crosshair.Enabled = v end
+})
+CrosshairToggle:AddColorPicker({
+    Name = "Crosshair Color",
+    Default = Color3.fromRGB(255, 255, 255),
+    Callback = function(v) Crosshair.Color = v end
+})
+SubCrosshair:AddDropdown({
+    Name = "Style",
+    Options = {"Plus", "Dot", "Circle"},
+    Default = "Plus",
+    Callback = function(v) Crosshair.Style = v end
+})
+SubCrosshair:AddSlider({
+    Name = "Position X",
+    Min = -100,
+    Max = 100,
+    Default = 0,
+    Callback = function(v) Crosshair.OffsetX = v end
+})
+SubCrosshair:AddSlider({
+    Name = "Position Y",
+    Min = -100,
+    Max = 100,
+    Default = 0,
+    Callback = function(v) Crosshair.OffsetY = v end
+})
+
+
+-- TAB 2: ESP
+local TabESP = Window:AddTab({ Name = "ESP", Icon = "eye" })
+local SubESPCham   = TabESP:AddSubTab("ESP Cham")
+local SubESPStatus = TabESP:AddSubTab("ESP Status")
+
+-- ---- ESP Cham ----
+SubESPCham:AddSection("ESP Cham")
+local SurvivorESPToggle = SubESPCham:AddToggle({
+    Name = "ESP Survivor",
+    Default = false,
+    Callback = function(v) ESP.Survivor = v end
+})
+SubESPCham:AddColorPicker({
+    Name = "Survivor Color",
+    Default = TeamColors.Survivor,
+    Callback = function(v) TeamColors.Survivor = v end
+})
+
+local KillerESPToggle = SubESPCham:AddToggle({
+    Name = "ESP Killer",
+    Default = false,
+    Callback = function(v) ESP.Killer = v end
+})
+SubESPCham:AddColorPicker({
+    Name = "Killer Color",
+    Default = TeamColors.Killer,
+    Callback = function(v) TeamColors.Killer = v end
+})
+
+local ESPGeneratorToggle = SubESPCham:AddToggle({
+    Name = "Generator",
+    Default = false,
+    Callback = function(v) ESP.Generator = v end
+})
+SubESPCham:AddColorPicker({
+    Name = "Generator Color",
+    Default = GeneratorColor,
+    Callback = function(v) GeneratorColor = v end
+})
+
+local ESPSCPToggle = SubESPCham:AddToggle({
+    Name = "SCP",
+    Default = false,
+    Callback = function(v) ESP.SCP = v end
+})
+SubESPCham:AddColorPicker({
+    Name = "SCP Color",
+    Default = SCPColor,
+    Callback = function(v) SCPColor = v end
+})
+
+local ESPPalletToggle = SubESPCham:AddToggle({
+    Name = "Pallet",
+    Default = false,
+    Callback = function(v) ESP.Pallet = v end
+})
+SubESPCham:AddColorPicker({
+    Name = "Pallet Color",
+    Default = PalletColor,
+    Callback = function(v) PalletColor = v end
+})
+
+local ESPWindowToggle = SubESPCham:AddToggle({
+    Name = "Window",
+    Default = false,
+    Callback = function(v) ESP.Window = v end
+})
+SubESPCham:AddColorPicker({
+    Name = "Window Color",
+    Default = WindowColor,
+    Callback = function(v) WindowColor = v end
+})
+
+SubESPCham:AddSlider({
+    Name = "ESP Distance",
+    Min = 10,
+    Max = 1000,
+    Default = 100,
+    Callback = function(v) ESP.Distance = v end
+})
+
+-- ---- ESP Status ----
+SubESPStatus:AddSection("ESP Status")
+SubESPStatus:AddToggle({
+    Name = "Enable Status ESP",
+    Default = false,
+    Callback = function(v) ESPStatus.Enabled = v end
+})
+SubESPStatus:AddToggle({
+    Name = "Show Name",
+    Default = true,
+    Callback = function(v) ESPStatus.ShowName = v end
+})
+SubESPStatus:AddToggle({
+    Name = "Show Item",
+    Default = true,
+    Callback = function(v) ESPStatus.ShowItem = v end
+})
+SubESPStatus:AddToggle({
+    Name = "Show Distance",
+    Default = true,
+    Callback = function(v) ESPStatus.ShowDistance = v end
+})
+SubESPStatus:AddToggle({
+    Name = "Show Health",
+    Default = false,
+    Callback = function(v) ESPStatus.ShowHealth = v end
+})
+SubESPStatus:AddSlider({
+    Name = "Status Radius",
+    Min = 20,
+    Max = 500,
+    Default = 100,
+    Callback = function(v) ESPStatus.Radius = v end
+})
+SubESPStatus:AddDivider()
+SubESPStatus:AddSection("Teleport (Loop)")
+SubESPStatus:AddButton({ Name = "TP Generator (Loop)", Callback = TeleportToGenerator })
+SubESPStatus:AddButton({ Name = "TP Hook (Loop)", Callback = TeleportToHook })
+SubESPStatus:AddButton({ Name = "TP Gate (Loop)", Callback = TeleportToGate })
+SubESPStatus:AddButton({ Name = "TP Pallet (Loop)", Callback = TeleportToPallet })
+SubESPStatus:AddButton({ Name = "TP Window (Loop)", Callback = TeleportToWindow })
+SubESPStatus:AddDivider()
+SubESPStatus:AddButton({ Name = "Refresh Map Cache", Callback = RefreshMapForTeleport })
+
+
+-- TAB 3: MISC
+local TabMisc = Window:AddTab({ Name = "Misc", Icon = "sliders" })
+local SubMovement = TabMisc:AddSubTab("Movement")
+local SubEmote    = TabMisc:AddSubTab("Emote")
+local SubFakeTag  = TabMisc:AddSubTab("Fake Tag")
+
+-- ---- Movement ----
+SubMovement:AddSection("Movement")
+SubMovement:AddToggle({
+    Name = "Walk Speed",
+    Default = false,
+    Callback = function(v)
+        Movement.WalkSpeedEnabled = v
+        if v then applyWalkSpeed()
+        else
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.WalkSpeed = Movement.OriginalWalkSpeed end
+        end
+    end
+})
+SubMovement:AddSlider({
+    Name = "Walk Speed Value",
+    Min = 16,
+    Max = 32,
+    Default = 17.6,
+    Rounding = 1,
+    Callback = function(v)
+        Movement.WalkSpeedValue = v
+        if Movement.WalkSpeedEnabled then applyWalkSpeed() end
+    end
+})
+SubMovement:AddButton({
+    Name = "Moonwalk",
+    Callback = function()
+        local success, err = pcall(function()
+            loadstring(game:HttpGet("https://pastebin.com/raw/JWr0bW8u"))()
+        end)
+        if success then
+            Window:Notify({ Title = "Moonwalk", Content = "GUI Moonwalk berhasil dimuat!", Type = "success", Duration = 3 })
+        else
+            Window:Notify({ Title = "Error", Content = "Gagal memuat Moonwalk!", Type = "warning", Duration = 3 })
+        end
+    end
+})
+SubMovement:AddToggle({
+    Name = "No Clip",
+    Default = false,
+    Callback = function(v) toggleNoClip(v) end
+})
+SubMovement:AddToggle({
+    Name = "Custom Jump Power",
+    Default = false,
+    Callback = function(v)
+        Movement.JumpPowerEnabled = v
+        if v then applyJumpPower()
+        else
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.JumpPower = Movement.OriginalJumpPower end
+        end
+    end
+})
+SubMovement:AddSlider({
+    Name = "Jump Power Value",
+    Min = 0,
+    Max = 300,
+    Default = 50,
+    Callback = function(v)
+        Movement.JumpPowerValue = v
+        if Movement.JumpPowerEnabled then applyJumpPower() end
+    end
+})
+
+-- ---- Emote ----
+SubEmote:AddSection("Emote")
+SubEmote:AddDropdown({
+    Name = "Select Emote",
+    Options = EmoteList,
+    Default = "Mannrobics",
+    Callback = function(v)
+        Emote.Selected = v
+        if EmoteButton.LabelRef then EmoteButton.LabelRef.Text = v end
+    end
+})
+SubEmote:AddButton({ Name = "Play Emote", Callback = function() playEmote(Emote.Selected) end })
+SubEmote:AddToggle({
+    Name = "Show Emote Button",
+    Default = false,
+    Callback = function(v)
+        EmoteButton.Show = v
+        if v then createEmoteButton() else removeEmoteButton() end
+    end
+})
+
+-- ---- Fake Tag ----
+SubFakeTag:AddSection("Fake Chat Tag")
+SubFakeTag:AddToggle({
+    Name = "Enable Fake Tag",
+    Default = FakeTag.Enabled,
+    Callback = function(v) FakeTag.Enabled = v end
+})
+SubFakeTag:AddInput({
+    Name = "Chat Tag",
+    Default = FakeTag.Text,
+    Placeholder = "[WISNU]",
+    Callback = function(v)
+        if v ~= "" then FakeTag.Text = v end
+    end
+})
+
+
+-- TAB 4: VISUAL
+local TabVisual = Window:AddTab({ Name = "Visual", Icon = "sparkles" })
+local SubGraphics = TabVisual:AddSubTab("Graphics")
+local SubMorph    = TabVisual:AddSubTab("Morph")
+local SubClock    = TabVisual:AddSubTab("Clock")
+local SubZoom     = TabVisual:AddSubTab("Zoom")
+
+-- ---- Graphics ----
+SubGraphics:AddSection("Graphics")
+SubGraphics:AddToggle({
+    Name = "Fullbright",
+    Default = false,
+    Callback = function(v) Visual.Fullbright = v; applyVisual() end
+})
+SubGraphics:AddToggle({
+    Name = "No Shadow",
+    Default = false,
+    Callback = function(v) Visual.NoShadow = v end
+})
+SubGraphics:AddToggle({
+    Name = "Low Graphics",
+    Default = false,
+    Callback = function(v) Visual.LowGraphics = v; applyOptimization() end
+})
+SubGraphics:AddToggle({
+    Name = "No Screen Effects",
+    Default = false,
+    Callback = function(v) Visual.NoScreenEffects = v; applyNoScreenEffects() end
+})
+SubGraphics:AddToggle({
+    Name = "Clean Sky",
+    Default = false,
+    Callback = function(v) Visual.CleanSky = v; applyOptimization() end
+})
+
+-- ---- Morph ----
+SubMorph:AddSection("Morph Avatar")
+SubMorph:AddButton({
+    Name = "Apply Korless",
+    Callback = function()
+        ApplyKorless()
+        Window:Notify({ Title = "Morph", Content = "Korless Morph Applied", Type = "success", Duration = 3 })
+    end
+})
+
+-- ---- Clock ----
+SubClock:AddSection("Clock & Ambient")
+SubClock:AddSlider({
+    Name = "Clock Time",
+    Min = 0,
+    Max = 24,
+    Default = 14,
+    Callback = function(v)
+        Visual.ClockTime = v
+        Visual.Ambient = true
+        applyVisual()
+    end
+})
+SubClock:AddSlider({
+    Name = "Brightness",
+    Min = 0,
+    Max = 5,
+    Default = 2,
+    Rounding = 1,
+    Callback = function(v)
+        Visual.Brightness = v
+        Visual.Ambient = true
+        applyVisual()
+    end
+})
+
+-- ---- Zoom ----
+SubZoom:AddSection("Zoom & FOV")
+SubZoom:AddToggle({
+    Name = "Third Person View",
+    Default = false,
+    Callback = function(v)
+        Killer.ThirdPerson = v
+        if not v then UpdateThirdPerson() end
+    end
+})
+SubZoom:AddToggle({
+    Name = "Unlimited Zoom Out",
+    Default = false,
+    Callback = function(v) CameraZoom.UnlimitedZoom = v; applyUnlimitedZoom() end
+})
+SubZoom:AddSlider({
+    Name = "Max Zoom Distance",
+    Min = 100,
+    Max = 5000,
+    Default = 1000,
+    Callback = function(v)
+        CameraZoom.MaxDistance = v
+        if CameraZoom.UnlimitedZoom then applyUnlimitedZoom() end
+    end
+})
+SubZoom:AddToggle({
+    Name = "Custom FOV",
+    Default = false,
+    Callback = function(v) CameraZoom.FOVEnabled = v; applyCameraFOV() end
+})
+SubZoom:AddSlider({
+    Name = "Camera FOV",
+    Min = 40,
+    Max = 120,
+    Default = 70,
+    Callback = function(v)
+        CameraZoom.FOV = v
+        if CameraZoom.FOVEnabled then applyCameraFOV() end
+    end
+})
+
+
+-- TAB 5: UI SETTINGS
+local TabUISettings = Window:AddTab({ Name = "UI Settings", Icon = "settings" })
+local SubUIMenu = TabUISettings:AddSubTab("Menu")
+
+SubUIMenu:AddSection("Menu Settings")
+SubUIMenu:AddToggle({
+    Name = "Custom Cursor",
+    Default = true,
+    Callback = function(v) Library.ShowCustomCursor = v end
+})
+SubUIMenu:AddDropdown({
+    Name = "Notification Side",
+    Options = {"Left", "Right"},
+    Default = "Right",
+    Callback = function(v) Window:SetNotifySide(v) end
+})
+SubUIMenu:AddDropdown({
+    Name = "DPI Scale",
+    Options = {"50%", "75%", "85%", "100%", "125%", "150%"},
+    Default = "85%",
+    Callback = function(v)
+        v = v:gsub("%%", "")
+        Window:SetDPIScale(tonumber(v))
+    end
+})
+SubUIMenu:AddToggle({
+    Name = "Glow AccentBar",
+    Default = true,
+    Callback = function(v) Window:SetHeaderGlow(v) end
+})
+SubUIMenu:AddToggle({
+    Name = "Show Profile",
+    Default = true,
+    Callback = function(v) Window:SetProfileVisible(v) end
+})
+SubUIMenu:AddDivider()
+SubUIMenu:AddSection("Keybinds")
+SubUIMenu:AddLabel({ Text = "Menu Bind" })
+SubUIMenu:AddKeyPicker({
+    Name = "Menu Keybind",
+    Default = "RightShift",
+    Mode = "Toggle",
+    Callback = function(v) Window:ToggleUI() end
+})
+SubUIMenu:AddDivider()
+SubUIMenu:AddButton({
+    Name = "Unload Script",
+    Callback = function()
+        if HideName.Connection then HideName.Connection:Disconnect(); HideName.Connection = nil end
+        removeSilentAimHook()
+        Library:Unload()
+    end
+})
+
+-- ============================================================
+--  NOTIFIKASI & SAVE MANAGER
+-- ============================================================
+Window:Notify({
+    Title = "Wisnu Hub",
+    Content = "Violence District Loaded! (Hide Name + Silent Aim)",
+    Type = "success",
+    Duration = 4
+})
+
+Window:SaveConfig()
+
+print("✅ Wisnu Hub - Violence District UI Migrated!")
+
+-- ============================================================
+--  BACKEND & LOGIKA (SEMUA DARI SCRIPT ASLI, TIDAK DIUBAH)
 -- ============================================================
 -- SERVICES
 local Players        = game:GetService("Players")
@@ -1038,882 +1923,6 @@ local RayParams = RaycastParams.new()
 RayParams.FilterType = Enum.RaycastFilterType.Blacklist
 
 local EmoteRemote = Remotes:WaitForChild("EmoteHandler")
-
--- ============================================================
---  UI STRUKTUR (OXIDELIB - GROWAGARDEN2)
--- ============================================================
-
-local TabPlayer = Window:AddTab({ Name = "Player", Icon = "user" })
-local SubSurvivor = TabPlayer:AddSubTab("Survivor")
-local SubKiller = TabPlayer:AddSubTab("Killer")
-local SubAimBot = TabPlayer:AddSubTab("AimBot")
-local SubToF = TabPlayer:AddSubTab("ToF")
-local SubParry = TabPlayer:AddSubTab("Parry")
-local SubCrosshair = TabPlayer:AddSubTab("Crosshair")
-
-local TabESP = Window:AddTab({ Name = "ESP", Icon = "eye" })
-local SubESPCham = TabESP:AddSubTab("ESP Cham")
-local SubESPStatus = TabESP:AddSubTab("ESP Status")
-
-local TabMisc = Window:AddTab({ Name = "Misc", Icon = "sliders" })
-local SubMovement = TabMisc:AddSubTab("Movement")
-local SubEmote = TabMisc:AddSubTab("Emote")
-local SubFakeTag = TabMisc:AddSubTab("Fake Tag")
-
-local TabVisual = Window:AddTab({ Name = "Visual", Icon = "sparkles" })
-local SubGraphics = TabVisual:AddSubTab("Graphics")
-local SubMorph = TabVisual:AddSubTab("Morph")
-local SubClock = TabVisual:AddSubTab("Clock")
-local SubZoom = TabVisual:AddSubTab("Zoom")
-
-local TabUISettings = Window:AddTab({ Name = "UI Settings", Icon = "settings" })
-local SubUIMenu = TabUISettings:AddSubTab("Menu")
-
--- ============================================================
---  UI ELEMENTS (SEMUA FITUR)
--- ============================================================
-
--- ===== PLAYER / SURVIVOR =====
-SubSurvivor:AddSection("Ability")
-SubSurvivor:AddToggle({
-    Name = "Auto Skill Check",
-    Default = false,
-    Callback = function(v)
-        Auto.SkillCheck = v
-        if v then startSkillCheck() end
-    end
-})
-SubSurvivor:AddDropdown({
-    Name = "Skill Check Mode",
-    Options = {"Legit", "Instant"},
-    Default = "Legit",
-    Callback = function(v) Auto.SkillCheckMode = v end
-})
-SubSurvivor:AddToggle({
-    Name = "Boost Gen Bypass",
-    Default = false,
-    Tooltip = "Mengaktifkan bypass generator untuk repair cepat",
-    Callback = function(v) 
-        setGenBypass(v)
-        if v then
-            Window:Notify({ Title = "Gen Bypass", Content = "Diaktifkan - Klik tombol BYPASS di layar (mobile)", Type = "info", Duration = 3 })
-        end
-    end
-})
-SubSurvivor:AddToggle({
-    Name = "Auto Drop Pallet",
-    Default = false,
-    Tooltip = "otomatis menjatuhkan pallet",
-    Callback = function(v) Auto.PalletDrop = v end
-})
-SubSurvivor:AddSlider({
-    Name = "Auto Pallet Distance",
-    Min = 5,
-    Max = 50,
-    Default = 6,
-    Callback = function(v) Auto.PalletDropDist = v end
-})
-SubSurvivor:AddToggle({
-    Name = "Auto Flee Killer",
-    Default = false,
-    Tooltip = "otomatis tp menjauh dari killer",
-    Callback = function(v) AutoFlee.Enabled = v end
-})
-SubSurvivor:AddToggle({
-    Name = "Anti Fall Damage",
-    Default = false,
-    Tooltip = "memblokir efek slow ketika jatuh",
-    Callback = function(v) PlayerMods.AntiFall = v end
-})
-SubSurvivor:AddToggle({
-    Name = "Anti KnockDown",
-    Default = false,
-    Tooltip = "memaksa berdiri ketika KnockDown",
-    Callback = function(v) PlayerMods.GodMode = v end
-})
-SubSurvivor:AddToggle({
-    Name = "Fast Vault",
-    Default = false,
-    Tooltip = "percepat animasi lompat",
-    Callback = function(v) FastVault.Enabled = v end
-})
-SubSurvivor:AddSlider({
-    Name = "Vault Animation Speed",
-    Min = 1,
-    Max = 5,
-    Default = 1.2,
-    Callback = function(v) FastVault.Speed = v end
-})
-SubSurvivor:AddToggle({
-    Name = "Disable Local Vault",
-    Default = false,
-    Tooltip = "Mencegah karaktermu melakukan vault",
-    Callback = function(v) PlayerMods.AntiVault = v end
-})
-
--- Hide Name (di Survivor)
-local HideNameToggle = SubSurvivor:AddToggle({
-    Name = "Hide Name (Streamer Mode)",
-    Default = false,
-    Callback = function(v)
-        HideName.Enabled = v
-        enableHideName(v)
-    end
-})
-HideNameToggle:AddKeyPicker({
-    Name = "Hide Name Keybind",
-    Default = "F3",
-    Mode = "Toggle",
-    Callback = function(v)
-        HideName.Enabled = v
-        enableHideName(v)
-    end
-})
-
-SubSurvivor:AddDivider()
-SubSurvivor:AddButton({ Name = "Instan Escape (Finish Line)", Callback = function() teleportToFinishLine() end })
-
--- ===== PLAYER / KILLER =====
-SubKiller:AddSection("Killer Abilities")
-SubKiller:AddToggle({
-    Name = "Block All Vaults (Entity Blocker)",
-    Default = false,
-    Tooltip = "memicu Entity Blocker (Mencegah Survivor Vault)",
-    Callback = function(v) Killer.BlockVaults = v end
-})
-SubKiller:AddToggle({
-    Name = "Anti Blind (Flashlight)",
-    Default = false,
-    Callback = function(v) Killer.AntiBlind = v end
-})
-SubKiller:AddToggle({
-    Name = "Auto Stalk (Myers)",
-    Default = false,
-    Callback = function(v)
-        AutoStalk.Enabled = v
-        if v then startAutoStalk() else stopAutoStalk() end
-    end
-})
-SubKiller:AddToggle({
-    Name = "Bypass Cooldown (Abyss)",
-    Default = false,
-    Callback = function(v)
-        Killer.BypassCooldown = v
-        if v then
-            StartCooldownBypass()
-            Window:Notify({ Title = "Bypass Cooldown", Content = "Diaktifkan", Type = "success", Duration = 3 })
-        else
-            StopCooldownBypass()
-            Window:Notify({ Title = "Bypass Cooldown", Content = "Dinonaktifkan", Type = "warning", Duration = 3 })
-        end
-    end
-})
-SubKiller:AddToggle({
-    Name = "Bypass Leap Cooldown (Hidden)",
-    Default = false,
-    Callback = function(v)
-        Killer.BypassLeap = v
-        if v then StartLeapBypass() end
-    end
-})
-SubKiller:AddToggle({
-    Name = "Auto Kill All",
-    Default = false,
-    Callback = function(v) Killer.KillAll = v end
-})
-SubKiller:AddToggle({
-    Name = "AimLock Attack",
-    Default = false,
-    Callback = function(v) AttackAim.Enabled = v; if v then startAttackAim() end end
-})
-SubKiller:AddDropdown({
-    Name = "Aimlock Mode",
-    Options = {"Normal", "Spear"},
-    Default = "Normal",
-    Callback = function(v) State.AttackAimMode = v end
-})
-SubKiller:AddSlider({
-    Name = "Spear Gravity",
-    Min = 10,
-    Max = 200,
-    Default = 50,
-    Callback = function(v) SpearAim.Gravity = v end
-})
-SubKiller:AddSlider({
-    Name = "Spear Speed",
-    Min = 20,
-    Max = 300,
-    Default = 100,
-    Callback = function(v) SpearAim.Speed = v end
-})
-SubKiller:AddDivider()
-SubKiller:AddDropdown({
-    Name = "Select Masked Power",
-    Options = MaskedPowers,
-    Default = "Cobra",
-    Callback = function(v) Masked.CurrentPower = v end
-})
-SubKiller:AddButton({ Name = "Activate Power", Callback = function()
-    local Event = ReplicatedStorage:FindFirstChild("Remotes", true)
-        and ReplicatedStorage.Remotes:FindFirstChild("Killers", true)
-        and ReplicatedStorage.Remotes.Killers:FindFirstChild("Masked", true)
-        and ReplicatedStorage.Remotes.Killers.Masked:FindFirstChild("Activatepower")
-    if Event then Event:FireServer(Masked.CurrentPower) end
-end })
-SubKiller:AddButton({ Name = "Deactivate Power", Callback = function()
-    local Event = ReplicatedStorage:FindFirstChild("Remotes", true)
-        and ReplicatedStorage.Remotes:FindFirstChild("Killers", true)
-        and ReplicatedStorage.Remotes.Killers:FindFirstChild("Masked", true)
-        and ReplicatedStorage.Remotes.Killers.Masked:FindFirstChild("Deactivatepower")
-    if Event then Event:FireServer() end
-end })
-
--- ===== PLAYER / AIMBOT =====
-SubAimBot:AddSection("Gun AimLock")
-SubAimBot:AddToggle({
-    Name = "Aim Lock",
-    Default = false,
-    Callback = function(v) GunAim.Enabled = v end
-})
-SubAimBot:AddDropdown({
-    Name = "Target",
-    Options = {"Killer", "Survivor", "SCP"},
-    Default = "Killer",
-    Callback = function(v) GunAim.TargetMode = v end
-})
-SubAimBot:AddDropdown({
-    Name = "Aim Part",
-    Options = {"Head", "HumanoidRootPart", "Torso"},
-    Default = "HumanoidRootPart",
-    Callback = function(v) GunAim.AimPart = v end
-})
-SubAimBot:AddSlider({
-    Name = "FOV",
-    Min = 50,
-    Max = 1000,
-    Default = 250,
-    Callback = function(v) GunAim.FOV = v end
-})
-SubAimBot:AddSlider({
-    Name = "Prediction",
-    Min = 0,
-    Max = 1,
-    Default = 0.12,
-    Rounding = 2,
-    Callback = function(v) GunAim.PredictStrength = v end
-})
-
-SubAimBot:AddDivider()
-SubAimBot:AddSection("Silent Aim (All Weapons)")
-local SilentAimToggle = SubAimBot:AddToggle({
-    Name = "Enable Silent Aim",
-    Default = false,
-    Tooltip = "Aim tanpa gerak kamera (hook)",
-    Callback = function(v)
-        SilentAim.Enabled = v
-        if v then setupSilentAimHook() else removeSilentAimHook() end
-    end
-})
-SubAimBot:AddSlider({
-    Name = "Silent FOV",
-    Min = 30,
-    Max = 500,
-    Default = 200,
-    Callback = function(v) SilentAim.FOV = v end
-})
-SubAimBot:AddSlider({
-    Name = "Silent Distance",
-    Min = 50,
-    Max = 800,
-    Default = 400,
-    Callback = function(v) SilentAim.Distance = v end
-})
-SubAimBot:AddDropdown({
-    Name = "Silent Target",
-    Options = {"Killer", "Survivor", "SCP"},
-    Default = "Killer",
-    Callback = function(v) SilentAim.TargetMode = v end
-})
-SubAimBot:AddDropdown({
-    Name = "Silent Aim Part",
-    Options = {"HumanoidRootPart", "Head", "Torso"},
-    Default = "HumanoidRootPart",
-    Callback = function(v) SilentAim.TargetPart = v end
-})
-SubAimBot:AddToggle({
-    Name = "Enable Prediction",
-    Default = true,
-    Callback = function(v) SilentAim.Prediction = v end
-})
-SubAimBot:AddSlider({
-    Name = "Prediction Strength",
-    Min = 0,
-    Max = 50,
-    Default = 15,
-    Callback = function(v) SilentAim.PredictStrength = v / 100 end
-})
-SubAimBot:AddSlider({
-    Name = "Bullet Speed",
-    Min = 100,
-    Max = 2000,
-    Default = 800,
-    Callback = function(v) SilentAim.BulletSpeed = v end
-})
-
--- ===== PLAYER / TOF =====
-SubToF:AddSection("Twist of Fate")
-SubToF:AddToggle({
-    Name = "SilentAim ToF",
-    Default = false,
-    Callback = function(v) ToFAimConfig.Enabled = v end
-})
-SubToF:AddDropdown({
-    Name = "Target",
-    Options = {"Killer", "Survivor", "SCP"},
-    Default = "Killer",
-    Callback = function(v) ToFAimConfig.TargetMode = v end
-})
-SubToF:AddDropdown({
-    Name = "Aim Part",
-    Options = {"HumanoidRootPart", "Head", "Torso"},
-    Default = "HumanoidRootPart",
-    Callback = function(v) ToFAimConfig.AimPart = v end
-})
-SubToF:AddToggle({
-    Name = "Aim Prediction",
-    Default = true,
-    Callback = function(v) ToFAimConfig.Predict = v end
-})
-SubToF:AddSlider({
-    Name = "Predict Bullet Speed",
-    Min = 50,
-    Max = 1000,
-    Default = 200,
-    Callback = function(v) ToFAimConfig.BulletSpeed = v end
-})
-SubToF:AddSlider({
-    Name = "Aim Range",
-    Min = 10,
-    Max = 300,
-    Default = 90,
-    Callback = function(v) ToFAimConfig.Range = v end
-})
-SubToF:AddSlider({
-    Name = "Safe FOV (Dot Threshold)",
-    Min = -1,
-    Max = 1,
-    Default = 0.5,
-    Rounding = 2,
-    Callback = function(v) ToFAimConfig.DotThreshold = v end
-})
-
--- ===== PLAYER / PARRY =====
-SubParry:AddSection("Parry Settings")
-local AutoParryToggle = SubParry:AddToggle({
-    Name = "Auto Parry",
-    Default = false,
-    Callback = function(v) Config.Surv_AutoParry = v end
-})
-AutoParryToggle:AddKeyPicker({
-    Name = "Auto Parry Key",
-    Default = "None",
-    Mode = "Toggle",
-    Callback = function(v) Config.Surv_AutoParry = v end
-})
-SubParry:AddToggle({
-    Name = "Safety Parry",
-    Default = false,
-    Callback = function(v) Config.Surv_ParrySafety = v end
-})
-SubParry:AddToggle({
-    Name = "Aggressive Mode",
-    Tooltip = "Langsung parry tanpa peduli face direction",
-    Default = false,
-    Callback = function(v) Config.Surv_ParryAggressive = v end
-})
-SubParry:AddToggle({
-    Name = "ESP Range Circle",
-    Tooltip = "Tampilkan radius jarak parry di karakter",
-    Default = true,
-    Callback = function(v) Config.Surv_ParryCircle = v end
-})
-SubParry:AddSlider({
-    Name = "Parry Radius",
-    Tooltip = "Jarak maksimal parry bereaksi",
-    Min = 5,
-    Max = 25,
-    Default = 15,
-    Callback = function(v) Config.Surv_ParryRadius = v end
-})
-SubParry:AddSlider({
-    Name = "Face Sensitivity",
-    Tooltip = "Sensitivitas arah pandang (1-10)",
-    Min = -10,
-    Max = 10,
-    Default = 7,
-    Callback = function(v) Config.Surv_ParryFace = v / 10 end
-})
-SubParry:AddDropdown({
-    Name = "Ignore Skills",
-    Options = {"Hidden S1", "Abyssal S1"},
-    Default = {},
-    Multi = true,
-    Tooltip = "Abaikan skill tertentu",
-    Callback = function(v)
-        local parsed = {}
-        for k, v2 in pairs(v) do
-            if type(k) == "string" and v2 then parsed[k] = true
-            elseif type(v2) == "string" then parsed[v2] = true end
-        end
-        Config.Ignored_Skills_List = parsed
-    end
-})
-SubParry:AddToggle({
-    Name = "Auto Crouch (Dodge S1)",
-    Tooltip = "Otomatis jongkok saat Abyssal menggunakan S1",
-    Default = false,
-    Callback = function(v) Config.Surv_AutoCrouch = v end
-})
-
-local FakeParryToggle = SubParry:AddToggle({
-    Name = "Enable Fake Parry",
-    Default = false,
-    Callback = function(v)
-        FakeParry.Enabled = v
-        if UserInputService.TouchEnabled then
-            if v then CreateFakeParryButton() else RemoveFakeParryButton() end
-        end
-    end
-})
-FakeParryToggle:AddKeyPicker({
-    Name = "Fake Parry Key",
-    Default = "G",
-    Mode = "Toggle",
-    Callback = function()
-        if FakeParry.Enabled then PlayFakeParry() end
-    end
-})
-SubParry:AddDropdown({
-    Name = "Fake Parry Animation",
-    Options = {"Enten", "Stopwatch", "Fih", "BloodShield"},
-    Default = "Enten",
-    Callback = function(v) FakeParry.Animation = v end
-})
-
--- ===== PLAYER / CROSSHAIR =====
-SubCrosshair:AddSection("Crosshair")
-local CrosshairToggle = SubCrosshair:AddToggle({
-    Name = "Enable Crosshair",
-    Default = false,
-    Callback = function(v) Crosshair.Enabled = v end
-})
-CrosshairToggle:AddColorPicker({
-    Name = "Crosshair Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Callback = function(v) Crosshair.Color = v end
-})
-SubCrosshair:AddDropdown({
-    Name = "Style",
-    Options = {"Plus", "Dot", "Circle"},
-    Default = "Plus",
-    Callback = function(v) Crosshair.Style = v end
-})
-SubCrosshair:AddSlider({
-    Name = "Position X",
-    Min = -100,
-    Max = 100,
-    Default = 0,
-    Callback = function(v) Crosshair.OffsetX = v end
-})
-SubCrosshair:AddSlider({
-    Name = "Position Y",
-    Min = -100,
-    Max = 100,
-    Default = 0,
-    Callback = function(v) Crosshair.OffsetY = v end
-})
-
--- ===== ESP / ESP CHAM =====
-SubESPCham:AddSection("ESP Cham")
-local SurvivorESP = SubESPCham:AddToggle({
-    Name = "ESP Survivor",
-    Default = false,
-    Callback = function(v) ESP.Survivor = v end
-})
-SurvivorESP:AddColorPicker({
-    Name = "Survivor Color",
-    Default = TeamColors.Survivor,
-    Callback = function(v) TeamColors.Survivor = v end
-})
-
-local KillerESP = SubESPCham:AddToggle({
-    Name = "ESP Killer",
-    Default = false,
-    Callback = function(v) ESP.Killer = v end
-})
-KillerESP:AddColorPicker({
-    Name = "Killer Color",
-    Default = TeamColors.Killer,
-    Callback = function(v) TeamColors.Killer = v end
-})
-
-local ESPGeneratorToggle = SubESPCham:AddToggle({
-    Name = "Generator",
-    Default = false,
-    Callback = function(v) ESP.Generator = v end
-})
-ESPGeneratorToggle:AddColorPicker({
-    Name = "Generator Color",
-    Default = GeneratorColor,
-    Callback = function(v) GeneratorColor = v end
-})
-
-local ESPSCPToggle = SubESPCham:AddToggle({
-    Name = "SCP",
-    Default = false,
-    Callback = function(v) ESP.SCP = v end
-})
-ESPSCPToggle:AddColorPicker({
-    Name = "SCP Color",
-    Default = SCPColor,
-    Callback = function(v) SCPColor = v end
-})
-
-local ESPPalletToggle = SubESPCham:AddToggle({
-    Name = "Pallet",
-    Default = false,
-    Callback = function(v) ESP.Pallet = v end
-})
-ESPPalletToggle:AddColorPicker({
-    Name = "Pallet Color",
-    Default = PalletColor,
-    Callback = function(v) PalletColor = v end
-})
-
-local ESPWindowToggle = SubESPCham:AddToggle({
-    Name = "Window",
-    Default = false,
-    Callback = function(v) ESP.Window = v end
-})
-ESPWindowToggle:AddColorPicker({
-    Name = "Window Color",
-    Default = WindowColor,
-    Callback = function(v) WindowColor = v end
-})
-
-SubESPCham:AddSlider({
-    Name = "ESP Distance",
-    Min = 10,
-    Max = 1000,
-    Default = 100,
-    Callback = function(v) ESP.Distance = v end
-})
-
--- ===== ESP / ESP STATUS =====
-SubESPStatus:AddSection("ESP Status")
-SubESPStatus:AddToggle({
-    Name = "Enable Status ESP",
-    Default = false,
-    Callback = function(v) ESPStatus.Enabled = v end
-})
-SubESPStatus:AddToggle({
-    Name = "Show Name",
-    Default = true,
-    Callback = function(v) ESPStatus.ShowName = v end
-})
-SubESPStatus:AddToggle({
-    Name = "Show Item",
-    Default = true,
-    Callback = function(v) ESPStatus.ShowItem = v end
-})
-SubESPStatus:AddToggle({
-    Name = "Show Distance",
-    Default = true,
-    Callback = function(v) ESPStatus.ShowDistance = v end
-})
-SubESPStatus:AddToggle({
-    Name = "Show Health",
-    Default = false,
-    Callback = function(v) ESPStatus.ShowHealth = v end
-})
-SubESPStatus:AddSlider({
-    Name = "Status Radius",
-    Min = 20,
-    Max = 500,
-    Default = 100,
-    Callback = function(v) ESPStatus.Radius = v end
-})
-
-SubESPStatus:AddDivider()
-SubESPStatus:AddSection("Teleport (Loop)")
-SubESPStatus:AddButton({ Name = "TP Generator (Loop)", Callback = TeleportToGenerator })
-SubESPStatus:AddButton({ Name = "TP Hook (Loop)", Callback = TeleportToHook })
-SubESPStatus:AddButton({ Name = "TP Gate (Loop)", Callback = TeleportToGate })
-SubESPStatus:AddButton({ Name = "TP Pallet (Loop)", Callback = TeleportToPallet })
-SubESPStatus:AddButton({ Name = "TP Window (Loop)", Callback = TeleportToWindow })
-SubESPStatus:AddDivider()
-SubESPStatus:AddButton({ Name = "Refresh Map Cache", Callback = RefreshMapForTeleport })
-
--- ===== MISC / MOVEMENT =====
-SubMovement:AddSection("Movement")
-SubMovement:AddToggle({
-    Name = "Walk Speed",
-    Default = false,
-    Callback = function(v)
-        Movement.WalkSpeedEnabled = v
-        if v then applyWalkSpeed()
-        else
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum then hum.WalkSpeed = Movement.OriginalWalkSpeed end
-        end
-    end
-})
-SubMovement:AddSlider({
-    Name = "Walk Speed Value",
-    Min = 16,
-    Max = 32,
-    Default = 17.6,
-    Rounding = 1,
-    Callback = function(v)
-        Movement.WalkSpeedValue = v
-        if Movement.WalkSpeedEnabled then applyWalkSpeed() end
-    end
-})
-SubMovement:AddButton({
-    Name = "Moonwalk",
-    Callback = function()
-        local success, err = pcall(function()
-            loadstring(game:HttpGet("https://pastebin.com/raw/JWr0bW8u"))()
-        end)
-        if success then
-            Window:Notify({ Title = "Moonwalk", Content = "GUI Moonwalk berhasil dimuat!", Type = "success", Duration = 3 })
-        else
-            Window:Notify({ Title = "Error", Content = "Gagal memuat Moonwalk!", Type = "warning", Duration = 3 })
-        end
-    end
-})
-SubMovement:AddToggle({
-    Name = "No Clip",
-    Default = false,
-    Callback = function(v) toggleNoClip(v) end
-})
-SubMovement:AddToggle({
-    Name = "Custom Jump Power",
-    Default = false,
-    Callback = function(v)
-        Movement.JumpPowerEnabled = v
-        if v then applyJumpPower()
-        else
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum then hum.JumpPower = Movement.OriginalJumpPower end
-        end
-    end
-})
-SubMovement:AddSlider({
-    Name = "Jump Power Value",
-    Min = 0,
-    Max = 300,
-    Default = 50,
-    Callback = function(v)
-        Movement.JumpPowerValue = v
-        if Movement.JumpPowerEnabled then applyJumpPower() end
-    end
-})
-
--- ===== MISC / EMOTE =====
-SubEmote:AddSection("Emote")
-SubEmote:AddDropdown({
-    Name = "Select Emote",
-    Options = EmoteList,
-    Default = "Mannrobics",
-    Callback = function(v)
-        Emote.Selected = v
-        if EmoteButton.LabelRef then EmoteButton.LabelRef.Text = v end
-    end
-})
-SubEmote:AddButton({ Name = "Play Emote", Callback = function() playEmote(Emote.Selected) end })
-SubEmote:AddToggle({
-    Name = "Show Emote Button",
-    Default = false,
-    Callback = function(v)
-        EmoteButton.Show = v
-        if v then createEmoteButton() else removeEmoteButton() end
-    end
-})
-
--- ===== MISC / FAKE TAG =====
-SubFakeTag:AddSection("Fake Chat Tag")
-SubFakeTag:AddToggle({
-    Name = "Enable Fake Tag",
-    Default = FakeTag.Enabled,
-    Callback = function(v) FakeTag.Enabled = v end
-})
-SubFakeTag:AddInput({
-    Name = "Chat Tag",
-    Default = FakeTag.Text,
-    Placeholder = "[WISNU]",
-    Callback = function(v)
-        if v ~= "" then FakeTag.Text = v end
-    end
-})
-
--- ===== VISUAL / GRAPHICS =====
-SubGraphics:AddSection("Graphics")
-SubGraphics:AddToggle({
-    Name = "Fullbright",
-    Default = false,
-    Callback = function(v) Visual.Fullbright = v; applyVisual() end
-})
-SubGraphics:AddToggle({
-    Name = "No Shadow",
-    Default = false,
-    Callback = function(v) Visual.NoShadow = v end
-})
-SubGraphics:AddToggle({
-    Name = "Low Graphics",
-    Default = false,
-    Callback = function(v) Visual.LowGraphics = v; applyOptimization() end
-})
-SubGraphics:AddToggle({
-    Name = "No Screen Effects",
-    Default = false,
-    Callback = function(v) Visual.NoScreenEffects = v; applyNoScreenEffects() end
-})
-SubGraphics:AddToggle({
-    Name = "Clean Sky",
-    Default = false,
-    Callback = function(v) Visual.CleanSky = v; applyOptimization() end
-})
-
--- ===== VISUAL / MORPH =====
-SubMorph:AddSection("Morph Avatar")
-SubMorph:AddButton({
-    Name = "Apply Korless",
-    Callback = function()
-        ApplyKorless()
-        Window:Notify({ Title = "Morph", Content = "Korless Morph Applied", Type = "success", Duration = 3 })
-    end
-})
-
--- ===== VISUAL / CLOCK =====
-SubClock:AddSection("Clock & Ambient")
-SubClock:AddSlider({
-    Name = "Clock Time",
-    Min = 0,
-    Max = 24,
-    Default = 14,
-    Callback = function(v)
-        Visual.ClockTime = v
-        Visual.Ambient = true
-        applyVisual()
-    end
-})
-SubClock:AddSlider({
-    Name = "Brightness",
-    Min = 0,
-    Max = 5,
-    Default = 2,
-    Rounding = 1,
-    Callback = function(v)
-        Visual.Brightness = v
-        Visual.Ambient = true
-        applyVisual()
-    end
-})
-
--- ===== VISUAL / ZOOM =====
-SubZoom:AddSection("Zoom & FOV")
-SubZoom:AddToggle({
-    Name = "Third Person View",
-    Default = false,
-    Callback = function(v)
-        Killer.ThirdPerson = v
-        if not v then UpdateThirdPerson() end
-    end
-})
-SubZoom:AddToggle({
-    Name = "Unlimited Zoom Out",
-    Default = false,
-    Callback = function(v) CameraZoom.UnlimitedZoom = v; applyUnlimitedZoom() end
-})
-SubZoom:AddSlider({
-    Name = "Max Zoom Distance",
-    Min = 100,
-    Max = 5000,
-    Default = 1000,
-    Callback = function(v)
-        CameraZoom.MaxDistance = v
-        if CameraZoom.UnlimitedZoom then applyUnlimitedZoom() end
-    end
-})
-SubZoom:AddToggle({
-    Name = "Custom FOV",
-    Default = false,
-    Callback = function(v) CameraZoom.FOVEnabled = v; applyCameraFOV() end
-})
-SubZoom:AddSlider({
-    Name = "Camera FOV",
-    Min = 40,
-    Max = 120,
-    Default = 70,
-    Callback = function(v)
-        CameraZoom.FOV = v
-        if CameraZoom.FOVEnabled then applyCameraFOV() end
-    end
-})
-
--- ===== UI SETTINGS / MENU =====
-SubUIMenu:AddSection("Menu Settings")
-SubUIMenu:AddToggle({
-    Name = "Custom Cursor",
-    Default = true,
-    Callback = function(v) Library.ShowCustomCursor = v end
-})
-SubUIMenu:AddDropdown({
-    Name = "Notification Side",
-    Options = {"Left", "Right"},
-    Default = "Right",
-    Callback = function(v) Window:SetNotifySide(v) end
-})
-SubUIMenu:AddDropdown({
-    Name = "DPI Scale",
-    Options = {"50%", "75%", "85%", "100%", "125%", "150%"},
-    Default = "85%",
-    Callback = function(v)
-        v = v:gsub("%%", "")
-        Window:SetDPIScale(tonumber(v))
-    end
-})
-SubUIMenu:AddToggle({
-    Name = "Glow AccentBar",
-    Default = true,
-    Callback = function(v) Window:SetHeaderGlow(v) end
-})
-SubUIMenu:AddToggle({
-    Name = "Show Profile",
-    Default = true,
-    Callback = function(v) Window:SetProfileVisible(v) end
-})
-SubUIMenu:AddDivider()
-SubUIMenu:AddSection("Keybinds")
-SubUIMenu:AddLabel({ Text = "Menu Bind" })
-SubUIMenu:AddKeyPicker({
-    Name = "Menu Keybind",
-    Default = "RightShift",
-    Mode = "Toggle",
-    Callback = function(v) Window:ToggleUI() end
-})
-SubUIMenu:AddDivider()
-SubUIMenu:AddButton({
-    Name = "Unload Script",
-    Callback = function()
-        if HideName.Connection then HideName.Connection:Disconnect(); HideName.Connection = nil end
-        removeSilentAimHook()
-        Library:Unload()
-    end
-})
 
 -- ============================================================
 --  BACKEND FUNCTIONS (SEMUA YANG HILANG)
@@ -3207,20 +3216,19 @@ function HandleBlockVaults()
     end
 end
 
--- ============================================================
---  NOTIFIKASI & SAVE MANAGER
--- ============================================================
-Window:Notify({
-    Title = "Wisnu Hub",
-    Content = "Violence District Loaded! (Hide Name + Silent Aim)",
-    Type = "success",
-    Duration = 4
-})
+-- Stub functions for ESP (dummy, karena di test.lua tidak ada implementasi, hanya deklarasi)
+local function createESP(char, color) end
+local function removeESP(char) end
+local function createStatusESP(p, char, root) end
+local function UpdateGenerator(gen) end
+local function UpdateMapESP(obj, root) end
+local function UpdateSCPEsp(root) end
+local function drawCrosshair() end
+local function updateParryCircle() end
+local function GetNearestKiller() return nil, math.huge end
+local function GetNearestAliveSurvivor() return nil end
 
-Window:SaveConfig()
-
-print("✅ Wisnu Hub - Violence District UI Migrated!")
-end
+end  -- MainScript
 
 -- 4. JALANKAN SISTEM KEY
 Onyx.Callbacks.OnSuccess = function()
