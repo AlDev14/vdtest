@@ -88,188 +88,543 @@ local SilentAim = {
     Prediction = true,
     PredictStrength = 0.15,
     BulletSpeed = 800,
-    TargetMode = "Killer",
-    Smoothing = 0.35,
-    VisibilityCheck = true,
-    UseHistory = true,
-    HistoryLength = 5,
-    RateLimit = 0.05,
+    TargetMode = "Killer"
 }
-
-local silentTargetHistory = {}
-local silentLastTargetTime = 0
-local silentSmoothedTarget = nil
 local silentHookActive = false
 local silentOriginalCast = nil
 
-local function getAverageVelocity(part, history)
-    if not history or #history < 2 then
-        return part.AssemblyLinearVelocity or Vector3.new()
-    end
-    local avg = Vector3.new()
-    for i = 2, #history do
-        avg = avg + (history[i] - history[i-1]) / 0.05
-    end
-    return avg / (#history - 1)
-end
+-- ============== CONFIG =================
+local ESP = {
+    Survivor  = false,
+    Killer    = false,
+    Generator = false,
+    Pallet    = false,
+    Window    = false,
+    SCP       = false,
+    Distance  = 100
+}
 
-local function isVisible(origin, targetPos, targetPart)
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Blacklist
-    params.FilterDescendantsInstances = {LocalPlayer.Character}
-    local result = workspace:Raycast(origin, targetPos - origin, params)
-    if not result then return true end
-    return result.Instance:IsDescendantOf(targetPart.Parent)
-end
+local ESPStatus = {
+    Enabled      = false,
+    ShowName     = true,
+    ShowDistance = true,
+    ShowHealth   = false,
+    ShowItem     = true,
+    Radius       = 100
+}
 
-local function getSilentTarget()
-    local root = getRoot()
-    if not root then return nil end
+local TeleportIndex = {
+    Generator = 1,
+    Hook = 1,
+    Gate = 1,
+    Pallet = 1,
+    Window = 1
+}
 
+local ESPItems = {
+    ["Twist of Fate"]   = true,
+    ["Bandage"]         = true,
+    ["Motion Tracker"]  = true,
+    ["Gate"]            = true,
+    ["Shadow Clone"]    = true,
+    ["Parrying Dagger"] = true
+}
+
+local TeamColors = {
+    Killer   = Color3.fromRGB(255, 60, 60),
+    Survivor = Color3.fromRGB(60, 255, 120)
+}
+
+local Auto = {
+    SkillCheck       = false,
+    SkillCheckMode   = "Legit",
+    Parry            = false,
+    ParryDelay       = 0,
+    ParryCooldown    = 1,
+    ParryDistance    = 15,
+    FaceSensitivity  = 0.7,
+    RequireFacing    = true,
+    PalletDrop       = false,
+    PalletDropDist   = 6
+}
+
+local GenBypass = {
+    Enabled     = false,
+    Button      = nil,
+    UI          = nil,
+    Cache       = {},
+    CacheTimer  = 0,
+    Processed   = {},
+    HotkeyCode  = Enum.KeyCode.G,
+}
+
+-- ============== GEN BYPASS SYSTEM ==============
+
+function GB_GetAllGenerators()
     local now = tick()
-    if now - silentLastTargetTime < SilentAim.RateLimit then
-        return silentSmoothedTarget
+    if now - GenBypass.CacheTimer < 5 then return GenBypass.Cache end
+    GenBypass.Cache = {}
+    GenBypass.CacheTimer = now
+    local mapFolder = workspace:FindFirstChild("Map")
+    if not mapFolder then return GenBypass.Cache end
+    pcall(function()
+        for _, v in pairs(mapFolder:GetDescendants()) do
+            if not v:IsA("Model") then continue end
+            if v.Name ~= "Generator" then continue end
+            local isReal = v:GetAttribute("RepairProgress") ~= nil
+                or v:GetAttribute("kickcount") ~= nil
+                or v:GetAttribute("ProgressRepair") ~= nil
+            if isReal then table.insert(GenBypass.Cache, v) end
+        end
+    end)
+    return GenBypass.Cache
+end
+
+function GB_GetPoints(genModel)
+    local points = {}
+    pcall(function()
+        for _, obj in pairs(genModel:GetChildren()) do
+            if obj.Name:find("GeneratorPoint") and obj:IsA("BasePart") then
+                table.insert(points, obj)
+            end
+        end
+    end)
+    return points
+end
+
+function GB_WaitRepairing(point, timeout)
+    local start = tick()
+    while tick() - start < (timeout or 1) do
+        if point:GetAttribute("IsRepairing") == true then return true end
+        task.wait(0.05)
     end
-    silentLastTargetTime = now
+    return false
+end
 
-    local myPos = root.Position
-    local cam = workspace.CurrentCamera
-    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-    local bestPart = nil
-    local bestScore = SilentAim.FOV
+function GB_DoRepair(targetPoint)
+    local genModel = targetPoint.Parent
+    if GenBypass.Processed[genModel] then return end
+    GenBypass.Processed[genModel] = true
 
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p == LocalPlayer then continue end
-        if not p.Character then continue end
-        local hum = p.Character:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
+    local character = LocalPlayer.Character
+    local hrp = character and character:FindFirstChild("HumanoidRootPart")
+    if not hrp then GenBypass.Processed[genModel] = nil return end
 
-        local valid = false
-        if SilentAim.TargetMode == "Killer" and p.Team and p.Team.Name == "Killer" then
-            valid = true
-        elseif SilentAim.TargetMode == "Survivor" and p.Team and p.Team.Name == "Survivors" then
-            valid = true
-        elseif SilentAim.TargetMode == "SCP" then
-            for obj in pairs(ESPCache.SCP) do
-                if obj and obj.Parent then valid = true; break end
-            end
-        end
-        if not valid then continue end
+    local RepairEvent = ReplicatedStorage:FindFirstChild("Remotes")
+        and ReplicatedStorage.Remotes:FindFirstChild("Generator")
+        and ReplicatedStorage.Remotes.Generator:FindFirstChild("RepairEvent")
 
-        local part = p.Character:FindFirstChild(SilentAim.TargetPart)
-        if not part then
-            part = p.Character:FindFirstChild("Head") or
-                   p.Character:FindFirstChild("HumanoidRootPart") or
-                   p.Character:FindFirstChild("Torso")
-        end
-        if not part then continue end
-
-        if SilentAim.UseHistory then
-            if not silentTargetHistory[part] then
-                silentTargetHistory[part] = {}
-            end
-            table.insert(silentTargetHistory[part], part.Position)
-            if #silentTargetHistory[part] > SilentAim.HistoryLength then
-                table.remove(silentTargetHistory[part], 1)
-            end
-        end
-
-        local targetPos = part.Position
-        if SilentAim.Prediction then
-            local vel
-            if SilentAim.UseHistory then
-                vel = getAverageVelocity(part, silentTargetHistory[part])
-            else
-                vel = part.AssemblyLinearVelocity or Vector3.new()
-            end
-            local dist = (targetPos - myPos).Magnitude
-            local travelTime = dist / SilentAim.BulletSpeed
-            targetPos = targetPos + vel * (SilentAim.PredictStrength * travelTime * 2)
-        end
-
-        if SilentAim.VisibilityCheck then
-            local origin = cam.CFrame.Position
-            if not isVisible(origin, targetPos, part) then
-                continue
-            end
-        end
-
-        local screenPos, onScreen = cam:WorldToViewportPoint(targetPos)
-        if not onScreen then continue end
-
-        local distFromCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-
-        local worldDist = (targetPos - myPos).Magnitude
-        local maxFOV = SilentAim.FOV * (1 - math.min(1, (worldDist / SilentAim.Distance) * 0.5))
-        if distFromCenter < bestScore and distFromCenter <= maxFOV and worldDist <= SilentAim.Distance then
-            bestScore = distFromCenter
-            bestPart = part
-        end
+    if not RepairEvent then 
+        GenBypass.Processed[genModel] = nil 
+        return 
     end
 
-    if bestPart then
-        local rawPos = bestPart.Position
-        if SilentAim.Smoothing > 0 then
-            if silentSmoothedTarget then
-                silentSmoothedTarget = silentSmoothedTarget:Lerp(rawPos, SilentAim.Smoothing)
-            else
-                silentSmoothedTarget = rawPos
+    local originalCFrame = hrp.CFrame
+    pcall(function()
+        for _, point in pairs(GB_GetPoints(genModel)) do
+            if point ~= targetPoint and point.Parent then
+                hrp.Anchored = true
+                hrp.CFrame = point.CFrame
+                task.wait(0.15)
+                pcall(function() RepairEvent:FireServer(point, true) end)
+                if not GB_WaitRepairing(point, 0.8) then
+                    pcall(function() RepairEvent:FireServer(point, false) end)
+                    task.wait(0.1)
+                    hrp.CFrame = point.CFrame
+                    task.wait(0.15)
+                    pcall(function() RepairEvent:FireServer(point, true) end)
+                    GB_WaitRepairing(point, 0.5)
+                end
+                hrp.Anchored = false
+                task.wait(0.05)
             end
-        else
-            silentSmoothedTarget = rawPos
         end
-        return bestPart
-    else
-        silentSmoothedTarget = nil
-        return nil
+    end)
+    pcall(function()
+        if hrp and hrp.Parent then
+            hrp.Anchored = false
+            hrp.CFrame = originalCFrame
+        end
+    end)
+    task.wait(0.1)
+    pcall(function() RepairEvent:FireServer(targetPoint, false) end)
+    GenBypass.Processed[genModel] = nil
+end
+
+function GB_GetNearestPoint()
+    local character = LocalPlayer.Character
+    local hrp = character and character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local bestPoint, bestDist = nil, math.huge
+    for _, gen in pairs(GB_GetAllGenerators()) do
+        for _, point in pairs(GB_GetPoints(gen)) do
+            local d = (hrp.Position - point.Position).Magnitude
+            if d < bestDist then bestDist = d; bestPoint = point end
+        end
+    end
+    return bestPoint, bestDist
+end
+
+function GB_UpdateButton()
+    if GenBypass.Button then
+        GenBypass.Button.Visible = GenBypass.Enabled and UserInputService.TouchEnabled
     end
 end
 
-local function setupSilentAimHook()
-    if silentHookActive then return end
-    local castTable = nil
-    for i, v in pairs(getgc(true)) do
-        if type(v) == "table" and rawget(v, "cast") then
-            castTable = v
-            break
+function GB_CreateButton()
+    local oldUI = PlayerGui:FindFirstChild("BypassGenUI")
+    if oldUI then oldUI:Destroy() end
+
+    GenBypass.UI = Instance.new("ScreenGui")
+    GenBypass.UI.Name = "BypassGenUI"
+    GenBypass.UI.ResetOnSpawn = false
+    GenBypass.UI.IgnoreGuiInset = true
+    GenBypass.UI.Parent = PlayerGui
+
+    GenBypass.Button = Instance.new("ImageButton")
+    GenBypass.Button.Name = "BypassGenButton"
+    GenBypass.Button.Size = UDim2.new(0, 60, 0, 60)
+    GenBypass.Button.Position = UDim2.new(0.88, 0, 0.55, 0)
+    GenBypass.Button.AnchorPoint = Vector2.new(0.5, 0.5)
+    GenBypass.Button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    GenBypass.Button.BackgroundTransparency = 0.15
+    GenBypass.Button.AutoButtonColor = true
+    GenBypass.Button.Visible = false
+    GenBypass.Button.ZIndex = 10
+    GenBypass.Button.Parent = GenBypass.UI
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = GenBypass.Button
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.2
+    stroke.Parent = GenBypass.Button
+    
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = "BYPASS"
+    lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    lbl.TextScaled = true
+    lbl.Font = Enum.Font.GothamBlack
+    lbl.ZIndex = 11
+    lbl.Parent = GenBypass.Button
+
+    GenBypass.Button.MouseButton1Click:Connect(function()
+        if not GenBypass.Enabled then return end
+        local bestPoint, bestDist = GB_GetNearestPoint()
+        if bestPoint and bestDist <= 8 then 
+            GB_DoRepair(bestPoint) 
         end
-    end
-    if not castTable then
-        Library:Notify({Title="Silent Aim Error", Description="Fungsi 'cast' tidak ditemukan", Duration=3})
-        return
-    end
-    silentOriginalCast = castTable.cast
-    if not silentOriginalCast then return end
-    silentHookActive = true
-    castTable.cast = function(p1, p2, p3)
-        if SilentAim.Enabled then
-            local target = getSilentTarget()
-            if target then
-                local aimPos = silentSmoothedTarget or target.Position
-                return target, aimPos, Vector3.new(0,1,0), target.Material
-            end
-        end
-        return silentOriginalCast(p1, p2, p3)
-    end
-    Library:Notify({Title="Silent Aim", Description="Hook installed!", Duration=2})
+    end)
 end
 
-local function removeSilentAimHook()
-    if not silentHookActive then return end
-    local castTable = nil
-    for i, v in pairs(getgc(true)) do
-        if type(v) == "table" and rawget(v, "cast") then
-            castTable = v
-            break
-        end
-    end
-    if castTable and silentOriginalCast then
-        castTable.cast = silentOriginalCast
-    end
-    silentHookActive = false
-    silentOriginalCast = nil
-    Library:Notify({Title="Silent Aim", Description="Hook removed", Duration=2})
+-- Inisialisasi button
+GB_CreateButton()
+
+-- Recreate button saat karakter respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    GB_CreateButton()
+    GB_UpdateButton()
+end)
+
+function setGenBypass(v)
+    GenBypass.Enabled = v
+    GB_UpdateButton()
 end
+
+local GenBoostConfig = {
+    Enabled = false,
+    LastBroadcast = 0
+}
+
+
+local FakeTag = {
+    Enabled = false,
+    Text = "[WISNU]",
+    Color = "#00FFFF"
+}
+local FakeParry = {
+    Enabled   = false,
+    Animation = "Parry",
+    Keybind   = Enum.KeyCode.V
+}
+
+local FakeParryAnimations = {
+    Enten     = "rbxassetid://127096285501517",
+    Stopwatch = "rbxassetid://81793464499285",
+    Fih       = "rbxassetid://123307242865945",
+    BloodShield = "rbxassetid://75939529748815"
+}
+
+local AutoFlee = {
+    Enabled        = false,
+    DetectDistance = 50,
+    Cooldown       = 0.1
+}
+
+local GunAim = {
+    Enabled         = false,
+    Holding         = false,
+    TargetMode      = "Killer",
+    Strength        = 1,
+    Predict         = true,
+    PredictStrength = 0.12,
+    FOV             = 250,
+    VisibilityCheck = true,
+    Target          = nil,
+    AimPart         = "HumanoidRootPart"
+}
+
+local ToFAimConfig = {
+    Enabled = false,
+    TargetMode = "Killer",
+    AimPart = "HumanoidRootPart",
+    Predict = true,
+    BulletSpeed = 200,
+    Range = 90,
+    DotThreshold = 0.5
+}
+
+
+local AttackAim = {
+    Enabled         = false,
+    Holding         = false,
+    Strength        = 1,
+    Predict         = true,
+    PredictStrength = 0.12,
+    FOV             = 250,
+    VisibilityCheck = true,
+    AimPart         = "HumanoidRootPart"
+}
+
+local SpearAim = {
+    Enabled = false,
+    Gravity = 50,
+    Speed   = 100,
+    FOV     = 250,
+    AimPart = "HumanoidRootPart"
+}
+
+local Killer = {
+    KillAll   = false,
+    KillRange = 500,
+    BypassCooldown = false,
+    BypassLeap = false,
+    ThirdPerson = false,
+    ThirdPersonWasActive = false,
+    OriginalCameraType = nil,
+    AntiBlind = false,
+    BlockVaults = false
+}
+
+local Masked = {
+    Enabled      = false,
+    CurrentPower = "Cobra"
+}
+
+local MaskedPowers = {"Cobra", "Richter", "Brandon", "Rabbit", "Alex"}
+
+local CameraZoom = {
+    UnlimitedZoom = false,
+    MaxDistance   = 1000,
+    MinDistance   = 0,
+    FOVEnabled    = false,
+    FOV           = 70,
+    DefaultFOV    = workspace.CurrentCamera.FieldOfView
+}
+
+local AutoStalk = {
+    Enabled    = false,
+    StalkRange = 150,
+    Target     = nil
+}
+
+local PlayerMods = {
+    GodMode = false,
+    AntiFall = false,
+    AntiVault = false
+}
+
+local Movement = {
+    JumpPowerEnabled  = false,
+    JumpPowerValue    = 50,
+    OriginalJumpPower = 50,
+    WalkSpeedEnabled  = false,
+    WalkSpeedValue    = 17.6,
+    OriginalWalkSpeed = 16,
+    NoClip            = false
+}
+
+local FastVault = {
+    Enabled    = false,
+    Speed      = 1.2,
+    ReplaceMap = {
+        ["rbxassetid://83873880822918"] = "rbxassetid://136962284480779"
+    }
+}
+
+local ParryRangeVisual = {
+    Enabled      = false,
+    Color        = Color3.fromRGB(255, 80, 80),
+    Transparency = 0.9
+}
+
+local Crosshair = {
+    Enabled   = false,
+    Size      = 8,
+    Thickness = 2,
+    Color     = Color3.fromRGB(255, 255, 255),
+    Style     = "Plus",
+    OffsetX   = 0,
+    OffsetY   = 0
+}
+
+local Visual = {
+    Fullbright      = false,
+    NoShadow        = false,
+    Ambient         = false,
+    AmbientColor    = Color3.fromRGB(255, 255, 255),
+    ClockTimeEnabled = true,
+    Brightness      = 2,
+    ClockTime       = 14,
+    LowGraphics     = false,
+    LowRender       = false,
+    NoFog           = false,
+    CleanSky        = false,
+    NoScreenEffects = false
+}
+
+local Emote = {
+    Selected = "Mannrobics"
+}
+
+local EmoteButton = {
+    Show        = false,
+    GuiInstance = nil
+}
+
+-- ============== GROUPED STATE / CONNECTIONS ==============
+
+local Connections = {
+    WalkSpeed     = nil,
+    NoClip        = nil,
+    GunAim        = nil,
+    AttackAim     = nil,
+    Stalk         = nil,
+    SkillHeartbeat = nil,
+    CooldownBypass = nil,
+    LeapBypass    = nil
+}
+
+local Config = {
+    Surv_AutoParry = false,
+    Surv_ParrySafety = false,
+    Surv_ParryAggressive = false,
+    Surv_ParryCircle = true,
+    Surv_ParryRadius = 15,
+    Surv_ParryFace = 0.7,
+    Surv_AutoCrouch = false,
+    Ignored_Skills_List = {}
+}
+
+local State = { 
+    ParryCooldown = false,
+    ParryCooldownTime = 60,
+    AutoParryAdornment = nil,
+    
+    FakeParryButton     = nil,
+    FakeParryTrack      = nil,
+    ParryCircle         = nil,
+    KillerTarget        = nil,
+    GunAimButtonConn    = nil,
+    CurrentGunButton    = nil,
+    CurrentAttackButton = nil,
+    busy                = false,
+    ParryActive         = false,
+    AttackAimMode       = "Normal",
+    LastFlee            = 0,
+    lastParry           = 0,
+    FPS                 = 0,
+    Frames              = 0,
+    LastTick            = tick(),
+    created             = false,
+    LastCrosshairStyle  = nil,
+    UsedPallets         = {}
+}
+
+local Timers = {
+    lastESPUpdate    = 0,
+    lastKillerUpdate = 0,
+    lastGodMode      = 0,
+    lastTracerScan   = 0,
+    lastPalletScan   = 0,
+    lastPalletDrop   = 0,
+    lastVaultBlock   = 0
+}
+
+local ESPCache = {
+    Objects    = {}, 
+    Status     = {},
+    SCP        = {}, 
+    Generators = {},
+    Windows    = {},
+    Pallets    = {}
+}
+
+local OriginalLighting = {
+    Brightness     = Lighting.Brightness,
+    ClockTime      = Lighting.ClockTime,
+    Ambient        = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    GlobalShadows  = Lighting.GlobalShadows
+}
+
+local LastVisualState = {
+    Fullbright  = nil,
+    NoShadow    = nil,
+    Ambient     = nil,
+    AmbientColor = nil,
+    Brightness  = nil,
+    ClockTime   = nil
+}
+
+local LastOptimizationState = {
+    LowGraphics = nil,
+    LowRender   = nil,
+    CleanSky    = nil
+}
+
+local VALID_PARRY_IDS = {
+    ["122812055447896"] = "Veil lunge",
+    ["133963973694098"] = "Mayers Basic",
+    ["117042998468241"] = "Mayers lunge",
+    ["135002183282873"] = "cure lunge",
+    ["121216847022485"] = "cure Basic",
+    ["132817836308238"] = "Jeff Basic",
+    ["129784271201071"] = "Jeff lunge",
+    ["82666958311998"] = "Jeff Frenzy",
+    ["78432063483146"] = "Abyssal Basic",
+    ["118907603246885"] = "Abyssal lunge",
+    ["139369275981139"] = "Jason Basic",
+    ["110355011987939"] = "Jason lunge",
+    ["111920872708571"] = "Masked Basic",
+    ["105374834496520"] = "Masked lunge",
+    ["138720291317243"] = "Masked Tony",
+    ["106871536134254"] = "Masked Alex",
+    ["130593238885843"] = "Masked Cobra",
+    ["115244153053858"] = "Masked Cobra lunge",
+    ["74968262036854"] = "Hidden Basic",
+    ["113255068724446"] = "Hidden lunge",
+    ["98163597193511"] = "Hidden S1",
+    ["80411309607666"] = "Abyssal S1"
+}
+
+local Attached = {}
 
 -- ============== HIDE NAME FUNCTIONS ==============
 local function shouldHideNameObject(object)
@@ -305,6 +660,131 @@ local function enableHideName(enabled)
             task.defer(process, object)
         end)
     end
+end
+
+-- ============== SILENT AIM FUNCTIONS (DIPERBAIKI) ==============
+local function getSilentTarget()
+    local root = getRoot()
+    if not root then return nil end
+    local myPos = root.Position
+    local cam = workspace.CurrentCamera
+    if not cam then return nil end
+    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+    local best, bestDist = nil, SilentAim.FOV
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer then continue end
+        local char = p.Character
+        if not char then continue end
+
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then continue end
+
+        local valid = false
+        if SilentAim.TargetMode == "Killer" and p.Team and p.Team.Name == "Killer" then
+            valid = true
+        elseif SilentAim.TargetMode == "Survivor" and p.Team and p.Team.Name == "Survivors" then
+            valid = true
+        elseif SilentAim.TargetMode == "SCP" then
+            for obj in pairs(ESPCache.SCP) do
+                if obj and obj.Parent then
+                    valid = true
+                    break
+                end
+            end
+        end
+        if not valid then continue end
+
+        local part = char:FindFirstChild(SilentAim.TargetPart)
+        if not part then
+            part = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+        end
+        if not part or not part:IsA("BasePart") then continue end
+
+        local targetPos = part.Position
+
+        if SilentAim.Prediction then
+            local success, vel = pcall(function()
+                return part.AssemblyLinearVelocity
+            end)
+            if success and vel and type(vel) == "Vector3" then
+                local dist = (targetPos - myPos).Magnitude
+                if dist > 0 then
+                    local travelTime = dist / SilentAim.BulletSpeed
+                    targetPos = targetPos + vel * (travelTime * SilentAim.PredictStrength)
+                end
+            end
+        end
+
+        -- Visibility check (raycast from camera)
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+        rayParams.FilterDescendantsInstances = { LocalPlayer.Character, char }
+        local direction = targetPos - cam.CFrame.Position
+        local result = workspace:Raycast(cam.CFrame.Position, direction, rayParams)
+        if result then
+            continue
+        end
+
+        local screenPos, onScreen = cam:WorldToViewportPoint(targetPos)
+        if onScreen then
+            local distFromCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+            if distFromCenter < bestDist and distFromCenter <= SilentAim.FOV then
+                local worldDist = (targetPos - myPos).Magnitude
+                if worldDist <= SilentAim.Distance then
+                    bestDist = distFromCenter
+                    best = part
+                end
+            end
+        end
+    end
+
+    return best
+end
+
+local function setupSilentAimHook()
+    if silentHookActive then return end
+    local castTable = nil
+    for i, v in pairs(getgc(true)) do
+        if type(v) == "table" and rawget(v, "cast") then
+            castTable = v
+            break
+        end
+    end
+    if not castTable then
+        Library:Notify({Title="Silent Aim Error", Description="Fungsi 'cast' tidak ditemukan", Duration=3})
+        return
+    end
+    silentOriginalCast = castTable.cast
+    if not silentOriginalCast then return end
+    silentHookActive = true
+    castTable.cast = function(p1, p2, p3)
+        if SilentAim.Enabled then
+            local target = getSilentTarget()
+            if target and target:IsA("BasePart") and target.Parent then
+                return target, target.Position, Vector3.new(0,1,0), target.Material
+            end
+        end
+        return silentOriginalCast(p1, p2, p3)
+    end
+    Library:Notify({Title="Silent Aim", Description="Hook installed!", Duration=2})
+end
+
+local function removeSilentAimHook()
+    if not silentHookActive then return end
+    local castTable = nil
+    for i, v in pairs(getgc(true)) do
+        if type(v) == "table" and rawget(v, "cast") then
+            castTable = v
+            break
+        end
+    end
+    if castTable and silentOriginalCast then
+        castTable.cast = silentOriginalCast
+    end
+    silentHookActive = false
+    silentOriginalCast = nil
+    Library:Notify({Title="Silent Aim", Description="Hook removed", Duration=2})
 end
 
 function IsSafeToParry(char)
@@ -3178,49 +3658,6 @@ AimlockBox:AddSlider("SilentBulletSpeed", {
     Callback = function(v) SilentAim.BulletSpeed = v end
 })
 
--- ===== NEW: Silent Aim Enhancements UI =====
-AimlockBox:AddDivider()
-AimlockBox:AddLabel("Silent Aim Enhancements")
-
-AimlockBox:AddToggle("SilentSmoothing", {
-    Text = "Smoothing",
-    Tooltip = "Haluskan pergerakan aim",
-    Default = true,
-    Callback = function(v)
-        SilentAim.Smoothing = v and 0.35 or 0
-    end
-})
-
-AimlockBox:AddToggle("SilentVisibility", {
-    Text = "Visibility Check",
-    Tooltip = "Hanya aim ke target yang terlihat (tidak menembus dinding)",
-    Default = true,
-    Callback = function(v)
-        SilentAim.VisibilityCheck = v
-    end
-})
-
-AimlockBox:AddToggle("SilentHistory", {
-    Text = "Use Velocity History",
-    Tooltip = "Gunakan history kecepatan untuk prediksi yang lebih akurat",
-    Default = true,
-    Callback = function(v)
-        SilentAim.UseHistory = v
-    end
-})
-
-AimlockBox:AddSlider("SilentRateLimit", {
-    Text = "Update Rate (ms)",
-    Tooltip = "Frekuensi update target (semakin rendah semakin responsif)",
-    Default = 50,
-    Min = 20,
-    Max = 200,
-    Rounding = 0,
-    Callback = function(v)
-        SilentAim.RateLimit = v / 1000
-    end
-})
-
 ToFBox:AddToggle("ToFAimToggle", {
     Text = "SilentAim ToF", Default = false,
     Callback = function(v) ToFAimConfig.Enabled = v end
@@ -3293,7 +3730,7 @@ MovementBox:AddCheckbox("JumpPowerToggle", {
         if v then applyJumpPower()
         else
             local char = LocalPlayer.Character
-            local hum  = char and char:FindFirstChildOfClass("Humanoid")
+            local hum  = char:FindFirstChildOfClass("Humanoid")
             if hum then hum.JumpPower = Movement.OriginalJumpPower end
         end
     end
