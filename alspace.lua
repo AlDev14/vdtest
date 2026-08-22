@@ -637,8 +637,6 @@ local State = {
     FPS                 = 0,
     Frames              = 0,
     LastTick            = tick(),
-    -- created             = false,   -- REMOVED (diganti GUI crosshair)
-    -- LastCrosshairStyle  = nil,     -- REMOVED
     UsedPallets         = {}
 }
 
@@ -980,7 +978,6 @@ local KillerAnims = {
 
 local hookedKillers = {}
 local VaultTracks   = {}
--- CrosshairDrawings = {} -- REMOVED (diganti GUI)
 local DisabledEffects   = {}
 
 local AttackPaths = {
@@ -2869,8 +2866,6 @@ end
 
 -- ====== END CROSSHAIR ======
 
--- ====== OLD CROSSHAIR FUNCTIONS REMOVED ======
-
 local function updateParryCircle()
     local root = getRoot()
     if not ParryRangeVisual.Enabled or not root then
@@ -3330,7 +3325,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
---  UI STRUKTUR (OXIDELIB - GROWAGARDEN2)
+--  UI STRUKTUR (OXIDELIB - GROWAGARDEN2) - DIPERBAIKI
 -- ============================================================
 
 local TabPlayer = Window:AddTab({ Name = "Player", Icon = "user" })
@@ -3360,7 +3355,7 @@ local TabUISettings = Window:AddTab({ Name = "UI Settings", Icon = "settings" })
 local SubUIMenu = TabUISettings:AddSubTab("Menu")
 
 -- ============================================================
---  UI ELEMENTS (SEMUA FITUR DARI vidijembot.txt)
+--  UI ELEMENTS (SEMUA FITUR DARI vidijembot.txt) - DIPERBAIKI
 -- ============================================================
 
 -- ===== PLAYER / SURVIVOR =====
@@ -3589,7 +3584,6 @@ SubAimBot:AddSlider({
     Min = 0,
     Max = 1,
     Default = 0.12,
-    Rounding = 2,
     Callback = function(v) GunAim.PredictStrength = v end
 })
 
@@ -3693,7 +3687,6 @@ SubToF:AddSlider({
     Min = -1,
     Max = 1,
     Default = 0.5,
-    Rounding = 2,
     Callback = function(v) ToFAimConfig.DotThreshold = v end
 })
 
@@ -3999,7 +3992,6 @@ SubMovement:AddSlider({
     Min = 16,
     Max = 32,
     Default = 17.6,
-    Rounding = 1,
     Callback = function(v)
         Movement.WalkSpeedValue = v
         if Movement.WalkSpeedEnabled then applyWalkSpeed() end
@@ -4075,10 +4067,11 @@ SubFakeTag:AddToggle({
     Default = FakeTag.Enabled,
     Callback = function(v) FakeTag.Enabled = v end
 })
-SubFakeTag:AddInput({
+-- Ganti AddInput dengan DropDown untuk tag populer (sesuai standar main.lua)
+SubFakeTag:AddDropdown({
     Name = "Chat Tag",
-    Default = FakeTag.Text,
-    Placeholder = "[WISNU]",
+    Options = {"[WISNU]", "[VIP]", "[DEV]", "[HUB]", "[WIBU]"},
+    Default = "[WISNU]",
     Callback = function(v)
         if v ~= "" then FakeTag.Text = v end
     end
@@ -4140,7 +4133,6 @@ SubClock:AddSlider({
     Min = 0,
     Max = 5,
     Default = 2,
-    Rounding = 1,
     Callback = function(v)
         Visual.Brightness = v
         Visual.Ambient = true
